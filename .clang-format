@@ -1,0 +1,23 @@
+PointerAlignment: Left
+BreakBeforeBraces: Attach
+IndentWidth: 4
+AccessModifierOffset: -4
+MaxEmptyLinesToKeep: 1
+ColumnLimit: 100
+BreakConstructorInitializers: BeforeComma
+SpaceBeforeCpp11BracedList: true
+SpacesInContainerLiterals: true
+AlwaysBreakTemplateDeclarations: Yes
+
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+BinPackParameters: false
+BinPackArguments: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+BreakBeforeBinaryOperators: None
+
+Cpp11BracedListStyle: false
