@@ -7,7 +7,7 @@
 
 #define EXPORT __attribute__((visibility("default")))
 
-using init_context = int (*)(uc_engine* uc, const uint8_t* data, size_t size);
+using init_context = int (*)(const uint8_t* data, size_t size);
 
 #ifdef __cplusplus
 extern "C" {

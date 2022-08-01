@@ -46,7 +46,7 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     assert(state.init_context_callback != nullptr &&
            "fuzzing should not be started without an initialization routine");
 
-    if (state.init_context_callback(state.uc, data, size)) {
+    if (state.init_context_callback(data, size)) {
         return -1;
     }
 
