@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "lfu"
+version = "0.1.0"
+description = "Use libFuzzer with unicorn"
+authors = ["liona24 <ackerm.lion@hotmail.de>"]
+license = "MIT"
+include = [ "**/lib/*.so" ]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+unicorn = "2.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
