@@ -11,8 +11,10 @@ add_subdirectory(third_party/unicorn)
 target_link_libraries(lfu PUBLIC unicorn)
 
 target_compile_options(lfu PRIVATE
-    -fsanitize=fuzzer
+    -fsanitize=fuzzer-no-link
     -fno-sanitize-coverage=trace-pc-guard,edge,trace-cmp,indirect-calls,8bit-counters
 )
 
 target_compile_features(lfu PRIVATE cxx_std_17)
+
+add_subdirectory(examples/)

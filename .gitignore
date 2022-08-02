@@ -142,3 +142,6 @@ CTestTestfile.cmake
 _deps
 
 build/
+
+# Things that might be created when running the examples
+crash-*
