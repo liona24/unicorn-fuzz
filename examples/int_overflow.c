@@ -106,7 +106,9 @@ int main(int argc, char** argv) {
         }
         printf("Got file %lu bytes, start parsing\n", filesize);
         pcontent_t ret = parse_data(buffer, filesize);
-        printf("Kind: 0x%lx Length: 0x%08x Buffer: %p\n", ret->Kind, ret->Length, ret->Buffer);
+        if (ret != NULL) {
+            printf("Kind: 0x%lx Length: 0x%08x Buffer: %p\n", ret->Kind, ret->Length, ret->Buffer);
+        }
     } else {
         printf("Usage: %s <input>\n", argv[0]);
         return -1;
