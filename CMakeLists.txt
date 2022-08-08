@@ -11,6 +11,7 @@ endif()
 
 add_library(lfu SHARED
     src/lfu.cpp
+    src/allocator.cpp
 )
 
 target_include_directories(lfu PRIVATE include/)

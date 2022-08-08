@@ -24,6 +24,35 @@ _lfu_start_fuzzer.argtypes = [
 ]
 _lfu_start_fuzzer.restype = ctypes.c_int
 
+_lfu_map_memory = LIB.lfu_mmap
+_lfu_map_memory.argtypes = [
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    ctypes.c_int,
+    ctypes.c_char_p,
+]
+_lfu_map_memory.restype = ctypes.c_int
+
+_lfu_replace_allocator = LIB.lfu_replace_allocator
+_lfu_replace_allocator.argtypes = [
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    ctypes.c_size_t,
+]
+_lfu_replace_allocator.restype = ctypes.c_int
+
+_lfu_allocate = LIB.lfu_allocate
+_lfu_allocate.argtypes = [
+    ctypes.c_uint64,
+]
+_lfu_allocate.restype = ctypes.c_uint64
+
+_lfu_deallocate = LIB.lfu_deallocate
+_lfu_deallocate.argtypes = [
+    ctypes.c_uint64,
+]
+
+
 def _wrap_init(init: Callable[[unicorn.Uc, bytes], int]):
 
     @LFU_INIT_CALLBACK_TY
@@ -49,3 +78,29 @@ def start_fuzzer(argv: list[str], init: Callable[[bytes], int], begin: int, unti
 
     if rv != 0:
         raise RuntimeError(f"lfu_start_fuzzer exit code {rv}")
+
+
+def map_memory(addr: int, size: int, perm: int, name: str | None=None):
+    if name is None:
+        name = ""
+    name = name.encode()
+
+    rv = _lfu_map_memory(addr, size, perm, name)
+
+    if rv != 0:
+        raise RuntimeError(f"lfu_map_memory return code {rv}")
+
+
+def replace_allocator(malloc_addr: int, free_addr: int, pool_size: int):
+    rv = _lfu_replace_allocator(malloc_addr, free_addr, pool_size)
+
+    if rv != 0:
+        raise RuntimeError(f"lfu_replace_allocator return code {rv}")
+
+
+def allocate(size: int) -> int:
+    return _lfu_allocate(size)
+
+
+def deallocate(addr: int) -> int:
+    return _lfu_deallocate(addr)

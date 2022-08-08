@@ -21,6 +21,12 @@ EXPORT int lfu_start_fuzzer(int argc,
                             uint64_t begin,
                             uint64_t until);
 
+EXPORT int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_size);
+
+EXPORT int lfu_mmap(uint64_t addr, uint64_t size, int perm, const char* name);
+EXPORT uint64_t lfu_allocate(uint64_t size);
+EXPORT void lfu_deallocate(uint64_t addr);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
