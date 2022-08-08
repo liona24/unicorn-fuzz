@@ -7,7 +7,7 @@ license = "MIT"
 include = [ "**/lib/*.so" ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 unicorn = "2.0.0"
 
 [build-system]
