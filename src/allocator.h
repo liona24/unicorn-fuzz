@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <unicorn/unicorn.h>
+
 class MemoryMap {
 public:
     static constexpr uint64_t PAGE_SIZE = 0x1000;
@@ -48,8 +50,16 @@ public:
     void dealloc(uint64_t addr);
     void reset();
 
+    int enable_address_sanitizer();
+
+    void validate_mem_access(uint64_t addr, size_t size, uc_mem_type type) const;
+
 private:
     void reset_arena(size_t pool_size);
+
+    [[noreturn]] void report_invalid_memory_access(uint64_t addr,
+                                                   size_t size,
+                                                   uc_mem_type type) const;
 
     struct Arena {
         uint64_t base_addr { 0 };
@@ -63,4 +73,6 @@ private:
     Arena arena_;
     std::unordered_map<uint64_t, size_t> allocations_ {};
     std::vector<uint8_t> shadow_;
+
+    uc_hook h_access_;
 };

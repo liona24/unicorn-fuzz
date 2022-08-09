@@ -105,7 +105,9 @@ void lfu_init_engine(uc_engine* uc) {
     State::the().mmem.reset(new MemoryMap);
 
     State::the().coverage.reset(new Coverage);
-    State::the().coverage->enable_instrumentation();
+    if (State::the().coverage->enable_instrumentation()) {
+        WARN("coverage instrumentation failed!");
+    }
 }
 
 int lfu_start_fuzzer(int argc,
@@ -165,6 +167,11 @@ int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_
     if (err != UC_ERR_OK) {
         WARN("free hook failed: %s", uc_strerror(err));
         return err;
+    }
+
+    if (state.allocator->enable_address_sanitizer()) {
+        WARN("enable sanitizer failed!");
+        return -1;
     }
 
     return 0;

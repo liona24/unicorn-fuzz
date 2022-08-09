@@ -1,5 +1,7 @@
 #include "allocator.h"
 
+#include <cstdint>
+
 #include "defs.h"
 #include "state.h"
 
@@ -146,4 +148,58 @@ uint64_t Allocator::Arena::get_chunk(uint64_t aligned_size) {
     size -= aligned_size;
 
     return ret;
+}
+
+static void hook_mem_access(uc_engine* uc,
+                            uc_mem_type type,
+                            uint64_t addr,
+                            int size,
+                            int64_t value,
+                            void* user_data) {
+    (void)uc;
+    (void)value;
+
+    Allocator* alloc = reinterpret_cast<Allocator*>(user_data);
+    alloc->validate_mem_access(addr, size, type);
+}
+
+int Allocator::enable_address_sanitizer() {
+    auto& state = State::the();
+
+    uc_err err = uc_hook_add(state.uc, &h_access_, UC_HOOK_MEM_VALID, (void*)&hook_mem_access,
+                             (void*)this, 1, 0);
+    if (err != UC_ERR_OK) {
+        WARN("could not add memory access hook: %s", uc_strerror(err));
+        return err;
+    }
+
+    return 0;
+}
+
+void Allocator::validate_mem_access(uint64_t addr, size_t size, uc_mem_type type) const {
+    if (addr < arena_.base_addr || addr > arena_.base_addr + size) {
+        return;
+    }
+
+    const uint64_t shadow_addr = (addr - arena_.base_addr) >> 3;
+    size_t i;
+    for (i = 0; i < ((size_t)size >> 3); i++) {
+        if (shadow_[i] != 0) {
+            report_invalid_memory_access(addr, size, type);
+            return;
+        }
+    }
+
+    for (int j = 0; j < (size & 7); j++) {
+        if ((shadow_[i] & (1 << (7 - j))) != 0) {
+            report_invalid_memory_access(addr, size, type);
+            return;
+        }
+    }
+}
+
+void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_type type) const {
+    WARN("invalid memory access @ %lx of size %lu", addr, size);
+    // TODO: more info
+    abort();
 }
