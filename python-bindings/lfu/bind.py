@@ -52,6 +52,13 @@ _lfu_deallocate.argtypes = [
     ctypes.c_uint64,
 ]
 
+_lfu_add_patch = LIB.lfu_add_patch
+_lfu_add_patch.argtypes = [
+    ctypes.c_uint64,
+    ctypes.c_char_p,
+    ctypes.c_size_t,
+    ctypes.c_char_p,
+]
 
 def _wrap_init(init: Callable[[unicorn.Uc, bytes], int]):
 
@@ -104,3 +111,7 @@ def allocate(size: int) -> int:
 
 def deallocate(addr: int) -> int:
     return _lfu_deallocate(addr)
+
+
+def add_patch(addr: int, patch: bytes, name: str | None=None):
+    _lfu_add_patch(addr, patch, len(patch), name.encode())

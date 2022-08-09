@@ -196,3 +196,22 @@ void lfu_deallocate(uint64_t addr) {
 
     state.allocator->dealloc(addr);
 }
+
+void lfu_add_patch(uint64_t addr, const uint8_t* patch_raw, size_t size, const char* name) {
+    auto& state = State::the();
+
+    std::string name_s = "<empty>";
+    if (name != nullptr) {
+        name_s.assign(name);
+    }
+
+    TRACE(" @ %lx %s", addr, name_s.c_str());
+
+    std::vector<uint8_t> patch;
+    patch.assign(patch_raw, patch_raw + size);
+
+    state.patches.emplace_back(addr, patch, name_s);
+    if (state.uc != nullptr) {
+        state.patches.back().apply(state.uc);
+    }
+}
