@@ -60,7 +60,7 @@ _lfu_add_patch.argtypes = [
     ctypes.c_char_p,
 ]
 
-def _wrap_init(init: Callable[[unicorn.Uc, bytes], int]):
+def _wrap_init(init: Callable[[bytes], int]):
 
     @LFU_INIT_CALLBACK_TY
     def wrapper(data_raw, size):
@@ -76,12 +76,12 @@ def init_engine(uc: unicorn.Uc):
 
 def start_fuzzer(argv: list[str], init: Callable[[bytes], int], begin: int, until: int):
     c_argv = (ctypes.c_char_p * (len(argv) + 1))()
-    c_argv[:-1] = list(map(str.encode, argv))
-    c_argv[-1] = None
+    c_argv[0] = b"lfu"
+    c_argv[1:] = list(map(str.encode, argv))
 
     init = _wrap_init(init)
 
-    rv = _lfu_start_fuzzer(len(argv), c_argv, init, begin, until)
+    rv = _lfu_start_fuzzer(len(argv) + 1, c_argv, init, begin, until)
 
     if rv != 0:
         raise RuntimeError(f"lfu_start_fuzzer exit code {rv}")

@@ -112,6 +112,8 @@ int lfu_start_fuzzer(int argc,
                      uint64_t begin,
                      uint64_t until) {
 
+    assert(argc > 0 && argv[0] != nullptr && "you need to provide a program name!");
+
     auto& state = State::the();
 
     if (state.uc == nullptr) {
