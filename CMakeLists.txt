@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(lfu VERSION 0.1.0)
 
-find_package(LLVM CONFIG)
+find_package(LLVM REQUIRED)
 
 if (LLVM_FOUND)
   message(STATUS "LLVM_VERSION: ${LLVM_VERSION}")
@@ -12,6 +12,7 @@ endif()
 add_library(lfu SHARED
     src/lfu.cpp
     src/allocator.cpp
+    src/coverage.cpp
 )
 
 target_include_directories(lfu PRIVATE include/)
@@ -20,7 +21,6 @@ add_subdirectory(third_party/unicorn)
 target_link_libraries(lfu PUBLIC unicorn)
 
 target_link_libraries(lfu PRIVATE "${LLVM_LIBRARY_DIRS}/clang/${LLVM_VERSION}/lib/libclang_rt.fuzzer_no_main-x86_64.a")
-
 
 target_compile_features(lfu PRIVATE cxx_std_17)
 
