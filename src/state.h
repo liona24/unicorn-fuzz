@@ -8,11 +8,10 @@
 
 #include <unicorn/unicorn.h>
 
+#include "allocator.h"
+#include "coverage.h"
 #include "defs.h"
 #include "lfu.h"
-
-class Allocator;
-class MemoryMap;
 
 struct Patch {
     uint64_t addr;
@@ -60,6 +59,7 @@ struct State {
 
     std::unique_ptr<MemoryMap> mmem { nullptr };
     std::unique_ptr<Allocator> allocator { nullptr };
+    std::unique_ptr<Coverage> coverage { nullptr };
 
     uc_hook h_malloc;
     uc_hook h_free;
