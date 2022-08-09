@@ -11,6 +11,7 @@
 #include <unicorn/unicorn.h>
 
 #include "allocator.h"
+#include "coverage.h"
 #include "defs.h"
 #include "state.h"
 
@@ -103,7 +104,8 @@ void lfu_init_engine(uc_engine* uc) {
     State::the().uc = uc;
     State::the().mmem.reset(new MemoryMap);
 
-    // TODO: Setup hooks for coverage and sanitizers
+    State::the().coverage.reset(new Coverage);
+    State::the().coverage->enable_instrumentation();
 }
 
 int lfu_start_fuzzer(int argc,
