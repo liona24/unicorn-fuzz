@@ -177,13 +177,13 @@ int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_
     return 0;
 }
 
-int lfu_mmap(uint64_t addr, uint64_t size, int perm, const char* name) {
-    if (State::the().mmem->mmap(addr, size, perm, name) != addr) {
+uint64_t lfu_mmap(uint64_t addr, uint64_t size, int perm, const char* name) {
+    const uint64_t actual_addr = State::the().mmem->mmap(addr, size, perm, name);
+    if (actual_addr == 0) {
         WARN("map_memory(%lx, %lu, %d, \"%s\") failed", addr, size, perm, name);
-        return 1;
     }
 
-    return 0;
+    return actual_addr;
 }
 
 uint64_t lfu_allocate(uint64_t size) {

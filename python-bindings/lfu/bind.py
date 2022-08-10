@@ -31,7 +31,7 @@ _lfu_map_memory.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
 ]
-_lfu_map_memory.restype = ctypes.c_int
+_lfu_map_memory.restype = ctypes.c_uint64
 
 _lfu_replace_allocator = LIB.lfu_replace_allocator
 _lfu_replace_allocator.argtypes = [
@@ -94,8 +94,8 @@ def map_memory(addr: int, size: int, perm: int, name: str | None=None):
 
     rv = _lfu_map_memory(addr, size, perm, name)
 
-    if rv != 0:
-        raise RuntimeError(f"lfu_map_memory return code {rv}")
+    if rv == 0 or (addr != 0 and rv != addr):
+        raise RuntimeError(f"lfu_map_memory returned {rv}")
 
 
 def replace_allocator(malloc_addr: int, free_addr: int, pool_size: int):

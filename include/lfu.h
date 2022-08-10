@@ -37,7 +37,7 @@ EXPORT int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_
 
 // Wrapper for uc_mem_map for internal book keeping. Use this if you want the custom allocator to
 // work properly
-EXPORT int lfu_mmap(uint64_t addr, uint64_t size, int perm, const char* name);
+EXPORT uint64_t lfu_mmap(uint64_t addr, uint64_t size, int perm, const char* name);
 // Convenience function to allocate some memory using the custom allocator.
 // This is useful if you f.e. want to setup some memory for the fuzz target during `init_context`
 EXPORT uint64_t lfu_allocate(uint64_t size);
