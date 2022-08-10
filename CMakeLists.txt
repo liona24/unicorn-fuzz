@@ -31,3 +31,4 @@ add_custom_command(
 )
 
 add_subdirectory(examples/)
+add_subdirectory(test/)

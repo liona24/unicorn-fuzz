@@ -41,10 +41,10 @@ struct Patch {
 struct State {
     explicit State() {}
 
-    static State& the() {
-        static std::unique_ptr<State> instance { nullptr };
+    static State& the(bool reset = false) {
+        thread_local static std::unique_ptr<State> instance { nullptr };
 
-        if (!instance) {
+        if (!instance || reset) {
             instance.reset(new State);
         }
 
