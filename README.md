@@ -6,8 +6,9 @@ Tested on Fedora 36. Should work on any linux. No guarantees for any other OS.
 
 Install build dependencies:
 ```
-sudo dnf install cmake ninja pkg-config clang
+sudo dnf install cmake ninja pkg-config llvm-devel gtest-devel clang
 ```
+(gtest is optional, used for tests)
 
 Build using CMake:
 ```
