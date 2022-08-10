@@ -68,6 +68,7 @@ private:
 
         void mmap(size_t pool_size);
         uint64_t get_chunk(uint64_t aligned_size);
+        void clear();
     };
 
     Arena arena_;

@@ -1,6 +1,7 @@
 #include "allocator.h"
 
 #include <cstdint>
+#include <cstdio>
 
 #include "defs.h"
 #include "state.h"
@@ -113,6 +114,7 @@ void Allocator::dealloc(uint64_t addr) {
 void Allocator::reset() {
     allocations_.clear();
     std::fill(shadow_.begin(), shadow_.end(), 0);
+    arena_.clear();
 
     // Since the MemoryMap is persistent across runs we do not need to re-map everything
 }
@@ -142,12 +144,18 @@ uint64_t Allocator::Arena::get_chunk(uint64_t aligned_size) {
         return 0;
     }
 
-    uint64_t ret = addr;
+    const uint64_t ret = addr;
 
     addr += aligned_size;
     size -= aligned_size;
 
     return ret;
+}
+
+void Allocator::Arena::clear() {
+    const uint64_t original_size = addr - base_addr + size;
+    addr = base_addr;
+    size = original_size;
 }
 
 static void hook_mem_access(uc_engine* uc,
@@ -164,6 +172,8 @@ static void hook_mem_access(uc_engine* uc,
 }
 
 int Allocator::enable_address_sanitizer() {
+    TRACE("");
+
     auto& state = State::the();
 
     uc_err err = uc_hook_add(state.uc, &h_access_, UC_HOOK_MEM_VALID, (void*)&hook_mem_access,
@@ -177,21 +187,21 @@ int Allocator::enable_address_sanitizer() {
 }
 
 void Allocator::validate_mem_access(uint64_t addr, size_t size, uc_mem_type type) const {
-    if (addr < arena_.base_addr || addr > arena_.base_addr + size) {
+    if (addr < arena_.base_addr || addr > arena_.addr + size) {
+        return;
+    }
+    if (size > 8) {
+        WARN("unexpected access size > 8: %zu", size);
         return;
     }
 
     const uint64_t shadow_addr = (addr - arena_.base_addr) >> 3;
-    size_t i;
-    for (i = 0; i < ((size_t)size >> 3); i++) {
-        if (shadow_[i] != 0) {
-            report_invalid_memory_access(addr, size, type);
-            return;
-        }
-    }
-
-    for (int j = 0; j < (size & 7); j++) {
-        if ((shadow_[i] & (1 << (7 - j))) != 0) {
+    const uint64_t addr_aligned = align_up(addr, (uint64_t)8);
+    int start_bit = 8 - (int)(addr_aligned - addr);
+    for (int i = 0; i < size; i++) {
+        const uint8_t shadow_byte = shadow_[shadow_addr + ((i + start_bit) >> 3)];
+        const int bit = (i + start_bit) % 8;
+        if ((shadow_byte & (1 << bit)) != 0) {
             report_invalid_memory_access(addr, size, type);
             return;
         }
@@ -200,6 +210,28 @@ void Allocator::validate_mem_access(uint64_t addr, size_t size, uc_mem_type type
 
 void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_type type) const {
     WARN("invalid memory access @ %lx of size %lu", addr, size);
+    fprintf(stderr, "shadow memory around the address:\n");
+    const uint64_t shadow_addr = (addr - arena_.base_addr) >> 3;
+    for (int i = 8; i > 0; i--) {
+        if (shadow_addr > i) {
+            fprintf(stderr, "%02x ", shadow_[shadow_addr - i]);
+        } else {
+            fprintf(stderr, "?? ");
+        }
+    }
+    for (int i = 0; i <= 8; i++) {
+        if (i + shadow_addr < shadow_.size()) {
+            fprintf(stderr, "%02x ", shadow_[i + shadow_addr]);
+        } else {
+            fprintf(stderr, "?? ");
+        }
+    }
+    fprintf(stderr, "\n                        ");
+    for (int i = 0; i < std::max((size_t)1, size >> 2); i++) {
+        fprintf(stderr, "^^ ");
+    }
+    fprintf(stderr, "\n");
+
     // TODO: more info
     abort();
 }
