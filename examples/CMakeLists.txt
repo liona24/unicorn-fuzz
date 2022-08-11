@@ -6,6 +6,10 @@ function(add_example name)
     add_executable("${name}_fuzz_standalone"
         ${name}.c
     )
+    target_link_options("${name}" PRIVATE
+        -Wl,-z,relro
+        -Wl,-z,now
+    )
     target_compile_options("${name}_fuzz_standalone" PRIVATE
         -fsanitize=fuzzer,address
     )
@@ -17,4 +21,5 @@ function(add_example name)
     )
 endfunction()
 
+add_example(basic)
 add_example(int_overflow)
