@@ -34,8 +34,6 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     assert(state.init_context_callback != nullptr &&
            "fuzzing should not be started without an initialization routine");
 
-    TRACE("");
-
     if (state.init_context_callback(data, size)) {
         return -1;
     }
@@ -49,8 +47,9 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     }
 
     uc_err err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
-    if (err) {
-        WARN("failed uc_emu_start: %s", uc_strerror(err));
+    if (err != UC_ERR_OK) {
+        WARN("error: %s", uc_strerror(err));
+        // TODO: more crash info
         abort();
     }
 

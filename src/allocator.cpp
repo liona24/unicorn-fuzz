@@ -197,7 +197,7 @@ void Allocator::validate_mem_access(uint64_t addr, size_t size, uc_mem_type type
 
     const uint64_t shadow_addr = (addr - arena_.base_addr) >> 3;
     const uint64_t addr_aligned = align_up(addr, (uint64_t)8);
-    int start_bit = 8 - (int)(addr_aligned - addr);
+    int start_bit = (8 - (int)(addr_aligned - addr)) % 8;
     for (int i = 0; i < size; i++) {
         const uint8_t shadow_byte = shadow_[shadow_addr + ((i + start_bit) >> 3)];
         const int bit = (i + start_bit) % 8;
@@ -227,7 +227,7 @@ void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_
         }
     }
     fprintf(stderr, "\n                        ");
-    for (int i = 0; i < std::max((size_t)1, size >> 2); i++) {
+    for (int i = 0; i < std::max((size_t)1, size >> 3); i++) {
         fprintf(stderr, "^^ ");
     }
     fprintf(stderr, "\n");
