@@ -36,52 +36,62 @@ typedef unsigned char ubyte;
 typedef struct {
     stype_t Kind;
     short Length;
-    char* Buffer;
+} header_t;
+
+#define BUF_SIZE 32
+
+typedef struct {
+    header_t Header;
+    char Buffer[BUF_SIZE];
 } content_t, *pcontent_t;
 
 pcontent_t parse_data(const unsigned char* buffer, size_t buf_len) {
-    pcontent_t data = (pcontent_t)malloc(sizeof(content_t));
-    data->Kind = STYPE_INVALID;
-    data->Length = 0;
-    data->Buffer = NULL;
-    size_t counter = 0;
-    while (counter < buf_len) {
-        // (DONT) FIXME: heap buffer OOB read
-        unsigned long long kind = *(unsigned long long*)(buffer + counter);
-        switch (kind) {
-        case STYPE_ANGELO:
-            printf("Got kind ANGELO!\n");
-            data->Kind = kind;
-            break;
-        case STYPE_JACK:
-            printf("Got kind JACK!\n");
-            data->Kind = kind;
-            break;
-        case STYPE_DZONERZY:
-            printf("Got kind DZONERZY!\n");
-            data->Kind = kind;
-            break;
-        default:
-            printf("Invalid kind 0x%llx\n", kind);
-            return NULL;
-        }
-        counter += sizeof(kind);
-        data->Length = *(short*)(buffer + counter);
-        counter += sizeof(data->Length);
-        printf("Got size: 0x%x\n", data->Length);
-        // (DONT) FIXME: integer addition overflow
-        if ((short)(data->Length + 1) > 32) {
-            printf("invalid length > 32\n");
-            return NULL;
-        } else {
-            data->Buffer = malloc(32);
-            memset(data->Buffer, 0, data->Length);
-            memcpy(data->Buffer, (buffer + counter), data->Length);
-        }
-        counter += data->Length;
-        printf("counter = %zu\n", counter);
+    if (buf_len < sizeof(header_t)) {
+        return NULL;
     }
-    return data;
+
+    pcontent_t parsed = (pcontent_t)malloc(sizeof(content_t));
+    if (parsed == NULL) {
+        printf("no mem!\n");
+        return NULL;
+    }
+
+    memcpy(&parsed->Header, buffer, sizeof(header_t));
+
+    switch (parsed->Header.Kind) {
+    case STYPE_ANGELO:
+        printf("Got kind ANGELO!\n");
+        break;
+    case STYPE_JACK:
+        printf("Got kind JACK!\n");
+        break;
+    case STYPE_DZONERZY:
+        printf("Got kind DZONERZY!\n");
+        break;
+    default:
+        printf("Invalid kind 0x%lx\n", parsed->Header.Kind);
+        goto error;
+    }
+
+    printf("Got size: 0x%x\n", parsed->Header.Length);
+
+    // (DONT) FIXME: integer addition overflow
+    if ((short)(parsed->Header.Length + 1) > BUF_SIZE) {
+        printf("invalid length > %d\n", BUF_SIZE);
+        goto error;
+    }
+
+    if (buf_len < sizeof(header_t) + parsed->Header.Length) {
+        printf("invalid buffer length\n");
+        goto error;
+    }
+
+    memcpy(parsed->Buffer, buffer + sizeof(header_t), parsed->Header.Length);
+    return parsed;
+
+error:
+    free(parsed);
+    return NULL;
 }
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -89,9 +99,10 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     pcontent_t ret = parse_data(data, size);
     if (ret != NULL) {
         free(ret);
+        return 0;
     }
 
-    return 0;
+    return -1;
 }
 #else
 int main(int argc, char** argv) {
@@ -107,7 +118,9 @@ int main(int argc, char** argv) {
         printf("Got file %lu bytes, start parsing\n", filesize);
         pcontent_t ret = parse_data(buffer, filesize);
         if (ret != NULL) {
-            printf("Kind: 0x%lx Length: 0x%08x Buffer: %p\n", ret->Kind, ret->Length, ret->Buffer);
+            printf("Kind: 0x%lx Length: 0x%08x Buffer: %32s\n", ret->Header.Kind,
+                   ret->Header.Length, ret->Buffer);
+            free(ret);
         }
     } else {
         printf("Usage: %s <input>\n", argv[0]);
