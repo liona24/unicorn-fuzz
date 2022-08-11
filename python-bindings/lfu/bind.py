@@ -64,7 +64,7 @@ def _wrap_init(init: Callable[[bytes], int]):
 
     @LFU_INIT_CALLBACK_TY
     def wrapper(data_raw, size):
-        data = bytes(ctypes.cast(data_raw, ctypes.POINTER(ctypes.c_uint8 * size)))
+        data = ctypes.string_at(data_raw, size)
         return init(data)
 
     return wrapper
