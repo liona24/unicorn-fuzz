@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
 extern void __sanitizer_cov_8bit_counters_init(uint8_t* Start, uint8_t* Stop);
+extern void __sanitizer_cov_pcs_init(const uintptr_t* pcs_beg, const uintptr_t* pcs_end);
 
 extern void __sanitizer_cov_trace_cmp8(uint64_t Arg1, uint64_t Arg2);
 extern void __sanitizer_cov_trace_cmp4(uint32_t Arg1, uint32_t Arg2);
@@ -81,16 +82,18 @@ static void hook_insn_cmp(uc_engine* uc,
 
     switch (size) {
     case 64:
-        __sanitizer_cov_trace_cmp8(arg1, arg2);
+        __sanitizer_cov_trace_cmp8(arg2, arg1);
         break;
     case 32:
-        __sanitizer_cov_trace_cmp4((uint32_t)arg1, (uint32_t)arg2);
+        __sanitizer_cov_trace_cmp4((uint32_t)arg2, (uint32_t)arg1);
         break;
     case 16:
-        __sanitizer_cov_trace_cmp2((uint16_t)arg1, (uint16_t)arg2);
+        __sanitizer_cov_trace_cmp2((uint16_t)arg2, (uint16_t)arg1);
         break;
     case 8:
-        __sanitizer_cov_trace_cmp1((uint8_t)arg1, (uint8_t)arg2);
+        __sanitizer_cov_trace_cmp1((uint8_t)arg2, (uint8_t)arg1);
+        break;
+    default:
         break;
     }
 }
@@ -120,21 +123,49 @@ Coverage::~Coverage() {
 int Coverage::enable_instrumentation() {
     auto& state = State::the();
 
-    uc_err err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE, (void*)&hook_insn_cmp, nullptr,
-                             1, 0, UC_TCG_OP_SUB, UC_TCG_OP_FLAG_CMP);
-    if (err != UC_ERR_OK) {
-        WARN("could not add cmp hook: %s", uc_strerror(err));
-        return err;
+    if (h_cmp_ || h_bb_) {
+        WARN("instrumentation already enabled!");
+        return 0;
     }
 
-    err = uc_hook_add(state.uc, &h_bb_, UC_HOOK_BLOCK, (void*)&hook_basic_block, (void*)this, 1, 0);
+    /*
+    // TODO: this currently fails to do its job because libFuzzer calls __builtin_return_address
+    which is obv fucked uc_err err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE,
+    (void*)&hook_insn_cmp, nullptr, 1, 0, UC_TCG_OP_SUB, UC_TCG_OP_FLAG_CMP); if (err != UC_ERR_OK)
+    { WARN("could not add cmp hook: %s", uc_strerror(err)); return err;
+    }
+    */
+
+    uc_err err =
+        uc_hook_add(state.uc, &h_bb_, UC_HOOK_BLOCK, (void*)&hook_basic_block, (void*)this, 1, 0);
     if (err != UC_ERR_OK) {
         WARN("could not add basic block hook: %s", uc_strerror(err));
         return err;
     }
 
+    std::fill(inl_8bit_counters_.begin(), inl_8bit_counters_.end(), 0);
+
     __sanitizer_cov_8bit_counters_init(inl_8bit_counters_.data(),
-                                       inl_8bit_counters_.data() + MAX_NUM_BASIC_BLOCKS);
+                                       inl_8bit_counters_.data() + inl_8bit_counters_.size());
+
+    /*
+    size_t i = 0;
+    for (auto& entry : pc_table_) {
+        // we cheat a bit here. these addresses are lazily resolved when we actually hit them
+        entry.bb = (void*)i;
+        entry.flags = 0;
+
+        if (i == 0) {
+            // for now we assume that only the first basic block is a "function entry"
+            entry.flags = 1;
+        }
+
+        i++;
+    }
+
+    __sanitizer_cov_pcs_init((uintptr_t*)pc_table_.data(),
+                             (uintptr_t*)(pc_table_.data() + pc_table_.size()));
+    */
 
     return 0;
 }
