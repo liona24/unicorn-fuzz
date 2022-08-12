@@ -23,3 +23,18 @@ endfunction()
 
 add_example(basic)
 add_example(int_overflow)
+
+add_executable(test_coverage
+    test_coverage.cpp
+)
+target_compile_options(
+    test_coverage PRIVATE
+    -fsanitize-coverage=inline-8bit-counters
+    -fsanitize=address
+)
+target_link_options(test_coverage PRIVATE
+    -Wl,-z,relro
+    -Wl,-z,now
+    -fsanitize=address
+)
+target_link_libraries(test_coverage PRIVATE "${LLVM_LIBRARY_DIRS}/clang/${LLVM_VERSION}/lib/libclang_rt.fuzzer_no_main-x86_64.a")
