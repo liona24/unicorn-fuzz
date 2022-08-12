@@ -40,6 +40,12 @@ typedef struct {
 
 #define BUF_SIZE 32
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define printf_(...)
+#else
+#define printf_(...) printf(__VA_ARGS__)
+#endif
+
 typedef struct {
     header_t Header;
     char Buffer[BUF_SIZE];
@@ -52,7 +58,7 @@ pcontent_t parse_data(const unsigned char* buffer, size_t buf_len) {
 
     pcontent_t parsed = (pcontent_t)malloc(sizeof(content_t));
     if (parsed == NULL) {
-        printf("no mem!\n");
+        printf_("no mem!\n");
         return NULL;
     }
 
@@ -60,29 +66,29 @@ pcontent_t parse_data(const unsigned char* buffer, size_t buf_len) {
 
     switch (parsed->Header.Kind) {
     case STYPE_ANGELO:
-        printf("Got kind ANGELO!\n");
+        printf_("Got kind ANGELO!\n");
         break;
     case STYPE_JACK:
-        printf("Got kind JACK!\n");
+        printf_("Got kind JACK!\n");
         break;
     case STYPE_DZONERZY:
-        printf("Got kind DZONERZY!\n");
+        printf_("Got kind DZONERZY!\n");
         break;
     default:
-        printf("Invalid kind 0x%lx\n", parsed->Header.Kind);
+        printf_("Invalid kind 0x%lx\n", parsed->Header.Kind);
         goto error;
     }
 
-    printf("Got size: 0x%x\n", parsed->Header.Length);
+    printf_("Got size: 0x%x\n", parsed->Header.Length);
 
     // (DONT) FIXME: integer addition overflow
     if ((short)(parsed->Header.Length + 1) > BUF_SIZE) {
-        printf("invalid length > %d\n", BUF_SIZE);
+        printf_("invalid length > %d\n", BUF_SIZE);
         goto error;
     }
 
     if (buf_len < sizeof(header_t) + parsed->Header.Length) {
-        printf("invalid buffer length\n");
+        printf_("invalid buffer length\n");
         goto error;
     }
 
