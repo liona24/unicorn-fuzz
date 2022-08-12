@@ -1,6 +1,8 @@
 #include "coverage.h"
 
 #include <stdint.h>
+#include <string.h>
+#include <sys/mman.h>
 
 #include "allocator.h"
 #include "defs.h"
@@ -76,26 +78,48 @@ static void hook_insn_cmp(uc_engine* uc,
                           uint32_t size,
                           void* user_data) {
     (void)uc;
-    (void)user_data;
 
     TRACE(" @ %lx (%lu, %lu) size = %u", addr, arg1, arg2, size);
 
+    void* target = nullptr;
+
     switch (size) {
     case 64:
-        __sanitizer_cov_trace_cmp8(arg2, arg1);
+        target = (void*)&__sanitizer_cov_trace_cmp8;
         break;
     case 32:
-        __sanitizer_cov_trace_cmp4((uint32_t)arg2, (uint32_t)arg1);
+        target = (void*)&__sanitizer_cov_trace_cmp4;
         break;
     case 16:
-        __sanitizer_cov_trace_cmp2((uint16_t)arg2, (uint16_t)arg1);
+        target = (void*)&__sanitizer_cov_trace_cmp2;
         break;
     case 8:
-        __sanitizer_cov_trace_cmp1((uint8_t)arg2, (uint8_t)arg1);
+        target = (void*)&__sanitizer_cov_trace_cmp1;
         break;
     default:
         break;
     }
+
+    if (target != nullptr) {
+        Coverage* coverage = reinterpret_cast<Coverage*>(user_data);
+        void* fake_pc = coverage->get_current_fake_pc();
+
+        register uint64_t a1 asm("rdi") = arg2;
+        register uint64_t a2 asm("rsi") = arg1;
+
+        // this will jump into our "ret-sled" which will emulate MAX_NUM_BASIC_BLOCKS distinct PCs
+        asm volatile goto("lea %l[fin](%%rip), %%rax;"
+                          "push %%rax;"
+                          "push %0;"
+                          "jmp *%1;"
+                          :
+                          : "r"(fake_pc), "r"(target), "r"(a1), "r"(a2)
+                          : "rax"
+                          : fin);
+    }
+
+fin:
+    return;
 }
 
 static void hook_basic_block(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
@@ -105,7 +129,7 @@ static void hook_basic_block(uc_engine* uc, uint64_t addr, uint32_t size, void* 
     TRACE(" @ %lx", addr);
 
     Coverage* coverage = reinterpret_cast<Coverage*>(user_data);
-    coverage->increment_counter(addr);
+    coverage->trace_bb(addr);
 }
 
 Coverage::~Coverage() {
@@ -115,6 +139,7 @@ Coverage::~Coverage() {
             uc_hook_del(State::the().uc, h_bb_);
         }
         if (h_cmp_) {
+            munmap(fake_caller_pcs_, MAX_NUM_BASIC_BLOCKS);
             uc_hook_del(State::the().uc, h_cmp_);
         }
     }
@@ -127,17 +152,31 @@ int Coverage::enable_instrumentation() {
         WARN("instrumentation already enabled!");
         return 0;
     }
+    uc_err err;
 
-    /*
-    // TODO: this currently fails to do its job because libFuzzer calls __builtin_return_address
-    which is obv fucked uc_err err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE,
-    (void*)&hook_insn_cmp, nullptr, 1, 0, UC_TCG_OP_SUB, UC_TCG_OP_FLAG_CMP); if (err != UC_ERR_OK)
-    { WARN("could not add cmp hook: %s", uc_strerror(err)); return err;
+    fake_caller_pcs_ = (uint8_t*)mmap(nullptr, MAX_NUM_BASIC_BLOCKS, PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    if (fake_caller_pcs_ == nullptr) {
+        WARN("mmap of fake pc map failed! continuing without cmp instrumentation (%s)",
+             strerror(errno));
+    } else {
+        // fill with ret instructions
+        std::fill(fake_caller_pcs_, fake_caller_pcs_ + MAX_NUM_BASIC_BLOCKS, 0xc3);
+
+        if (mprotect(fake_caller_pcs_, MAX_NUM_BASIC_BLOCKS, PROT_READ | PROT_EXEC)) {
+            WARN("mprotect of fake pc map failed! continuing without cmp instrumentation (%s)",
+                 strerror(errno));
+        } else {
+            err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE, (void*)&hook_insn_cmp,
+                              (void*)this, 1, 0, UC_TCG_OP_SUB, UC_TCG_OP_FLAG_CMP);
+            if (err != UC_ERR_OK) {
+                WARN("could not add cmp hook! continuing without cmp instrumentation (%s)",
+                     uc_strerror(err));
+            }
+        }
     }
-    */
 
-    uc_err err =
-        uc_hook_add(state.uc, &h_bb_, UC_HOOK_BLOCK, (void*)&hook_basic_block, (void*)this, 1, 0);
+    err = uc_hook_add(state.uc, &h_bb_, UC_HOOK_BLOCK, (void*)&hook_basic_block, (void*)this, 1, 0);
     if (err != UC_ERR_OK) {
         WARN("could not add basic block hook: %s", uc_strerror(err));
         return err;
@@ -170,7 +209,7 @@ int Coverage::enable_instrumentation() {
     return 0;
 }
 
-void Coverage::increment_counter(uint64_t addr) {
+void Coverage::trace_bb(uint64_t addr) {
     auto it = basic_blocks_.find(addr);
     if (it == basic_blocks_.end()) {
         if (basic_blocks_.size() >= inl_8bit_counters_.size()) {
@@ -187,5 +226,13 @@ void Coverage::increment_counter(uint64_t addr) {
         it = res.first;
     }
 
+    current_bb_idx_ = it->second;
     inl_8bit_counters_[it->second]++;
+}
+
+void* Coverage::get_current_fake_pc() const {
+    assert(fake_caller_pcs_ != nullptr &&
+           "should not enable instrumentation when fake pc map failed!");
+
+    return (void*)&fake_caller_pcs_[current_bb_idx_];
 }
