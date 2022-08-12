@@ -7,7 +7,8 @@
 #include "allocator.h"
 #include "defs.h"
 #include "state.h"
-#include "unicorn/unicorn.h"
+
+#include <unicorn/unicorn.h>
 
 #ifdef __cplusplus
 extern "C" {

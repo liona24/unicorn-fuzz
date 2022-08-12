@@ -13,6 +13,7 @@ add_library(lfu SHARED
     src/lfu.cpp
     src/allocator.cpp
     src/coverage.cpp
+    src/crash_info.cpp
 )
 
 target_include_directories(lfu PRIVATE include/)

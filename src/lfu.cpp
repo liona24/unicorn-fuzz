@@ -12,6 +12,7 @@
 
 #include "allocator.h"
 #include "coverage.h"
+#include "crash_info.h"
 #include "defs.h"
 #include "state.h"
 
@@ -49,7 +50,7 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     uc_err err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
     if (err != UC_ERR_OK) {
         WARN("error: %s", uc_strerror(err));
-        // TODO: more crash info
+        render_crash_context();
         abort();
     }
 
