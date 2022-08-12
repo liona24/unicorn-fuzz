@@ -137,11 +137,17 @@ Coverage::~Coverage() {
     if (State::the().uc != nullptr) {
         if (h_bb_) {
             uc_hook_del(State::the().uc, h_bb_);
+            h_bb_ = 0;
         }
         if (h_cmp_) {
-            munmap(fake_caller_pcs_, MAX_NUM_BASIC_BLOCKS);
             uc_hook_del(State::the().uc, h_cmp_);
+            h_cmp_ = 0;
         }
+    }
+
+    if (fake_caller_pcs_ != nullptr) {
+        munmap(fake_caller_pcs_, MAX_NUM_BASIC_BLOCKS);
+        fake_caller_pcs_ = nullptr;
     }
 }
 
@@ -167,8 +173,11 @@ int Coverage::enable_instrumentation() {
             WARN("mprotect of fake pc map failed! continuing without cmp instrumentation (%s)",
                  strerror(errno));
         } else {
+            // we add both UC_TCG_OP_FLAG_CMP and UC_TCG_OP_FLAG_DIRECT here, because it drastically
+            // improves testcase generation
+            constexpr uint32_t flags = 0;
             err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE, (void*)&hook_insn_cmp,
-                              (void*)this, 1, 0, UC_TCG_OP_SUB, UC_TCG_OP_FLAG_CMP);
+                              (void*)this, 1, 0, UC_TCG_OP_SUB, flags);
             if (err != UC_ERR_OK) {
                 WARN("could not add cmp hook! continuing without cmp instrumentation (%s)",
                      uc_strerror(err));
