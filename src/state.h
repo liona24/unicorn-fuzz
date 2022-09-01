@@ -8,6 +8,7 @@
 
 #include <unicorn/unicorn.h>
 
+#include "abi.h"
 #include "allocator.h"
 #include "coverage.h"
 #include "defs.h"
@@ -51,7 +52,10 @@ struct State {
         return *instance.get();
     }
 
+    void render_crash_context() { abi->render_crash_context(uc); }
+
     uc_engine* uc { nullptr };
+    std::unique_ptr<IABIAbstraction> abi { nullptr };
 
     // Address range to simulate for each input
     uint64_t begin, until;

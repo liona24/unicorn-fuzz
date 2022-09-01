@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "crash_info.h"
 #include "defs.h"
 #include "state.h"
 
@@ -233,6 +232,6 @@ void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_
     }
     fprintf(stderr, "\n");
 
-    render_crash_context();
+    State::the().render_crash_context();
     abort();
 }

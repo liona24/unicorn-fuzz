@@ -10,9 +10,9 @@
 
 #include <unicorn/unicorn.h>
 
+#include "abi.h"
 #include "allocator.h"
 #include "coverage.h"
-#include "crash_info.h"
 #include "defs.h"
 #include "state.h"
 
@@ -50,7 +50,7 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     uc_err err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
     if (err != UC_ERR_OK) {
         WARN("error: %s", uc_strerror(err));
-        render_crash_context();
+        state.render_crash_context();
         abort();
     }
 
@@ -62,22 +62,9 @@ void malloc_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
     (void)size;
     (void)user_data;
 
-    // TODO: make this arch dependent
-
-    uint64_t malloc_size;
-    uint64_t result = 0;
-    uc_err err = uc_reg_read(uc, UC_X86_REG_RDI, &malloc_size);
-
-    if (err != UC_ERR_OK) {
-        WARN("failed to read malloc size");
-    } else {
-        result = State::the().allocator->alloc(malloc_size);
-    }
-
-    err = uc_reg_write(uc, UC_X86_REG_RAX, &result);
-    if (err != UC_ERR_OK) {
-        WARN("failed to write malloc pointer!");
-    }
+    uint64_t malloc_size = State::the().abi->read_arg0(uc);
+    uint64_t result = State::the().allocator->alloc(malloc_size);
+    State::the().abi->set_ret(uc, result);
 }
 
 void free_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
@@ -85,14 +72,8 @@ void free_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
     (void)size;
     (void)user_data;
 
-    uint64_t malloc_addr;
-    uc_err err = uc_reg_read(uc, UC_X86_REG_RDI, &malloc_addr);
-
-    if (err != UC_ERR_OK) {
-        WARN("failed to read pointer to free");
-    } else {
-        State::the().allocator->dealloc(malloc_addr);
-    }
+    uint64_t malloc_addr = State::the().abi->read_arg0(uc);
+    State::the().allocator->dealloc(malloc_addr);
 }
 
 void lfu_init_engine(uc_engine* uc) {
@@ -102,6 +83,7 @@ void lfu_init_engine(uc_engine* uc) {
     }
 
     State::the().uc = uc;
+    State::the().abi.reset(new ABIAbstractionX86_64);
     State::the().mmem.reset(new MemoryMap);
 
     State::the().coverage.reset(new Coverage);
@@ -151,7 +133,7 @@ int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_
             return err;
         }
 
-        state.patches.emplace_back(addr, std::vector<uint8_t>({ 0xc3 }), "allocator");
+        state.patches.emplace_back(addr, state.abi->ret_instr(), "allocator");
         state.patches.back().apply(state.uc);
 
         return UC_ERR_OK;
