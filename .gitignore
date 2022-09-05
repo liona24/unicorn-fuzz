@@ -146,3 +146,6 @@ build/
 # Things that might be created when running the examples
 crash-*
 dump_*.json
+
+# qiling root fss
+third_party/rootfs
