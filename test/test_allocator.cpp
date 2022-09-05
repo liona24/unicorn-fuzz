@@ -1,4 +1,5 @@
 
+#include <cstdint>
 #include <gtest/gtest-death-test.h>
 #include <gtest/gtest.h>
 #include <unicorn/unicorn.h>
@@ -23,6 +24,81 @@ static const uint8_t shellcode_ok[] = {
 
     /* 0000000000000018 <free>: */
     0x90, // nop
+};
+
+/*
+# Code:
+# compile with
+# clang -c -target mips -mcpu=mips32 test/simple_code_mips.s
+.section .text
+
+    .space 0x1000
+
+    _start:
+        move $v0, $0
+        li $v0, 0
+
+        li $a0, 11
+        la $t0, malloc
+        jalr $t0
+
+        lbu $t0, 10($v0)
+        lbu $t0, 11($v0)
+
+        nop
+
+    malloc:
+        # stub, will be intercepted by our runtime
+        jr $ra
+
+    free:
+        # stub, will be intercepted by our runtime
+        jr $ra
+*/
+static const uint32_t shellcode_mips32_le_oob_1b[] = {
+    /* 00001000 <_start>: */
+    0x00001025, // move    v0, zero
+    0x24020000, // li      v0,0
+    0x2404000b, // li      a0,11
+    0x3c080000, // lui     t0,0x0
+    0x25081028, // addiu   t0,t0,4136
+    0x0100f809, // jalr    t0
+    0x00000000, // nop
+    0x9048000a, // lbu     t0,10(v0)
+    0x9048000b, // lbu     t0,11(v0)
+    0x00000000, // nop
+
+    /* 00001028 <malloc>: */
+    0x03e00008, // jr      ra
+    0x00000000, // nop
+
+    /* 00001030 <free>: */
+    0x03e00008, // jr      ra
+    0x00000000, // nop
+
+};
+
+static const uint32_t shellcode_mips32_le_oob_n1b[] = {
+    /* 00001000 <_start>: */
+    0x00001025, // move    v0, zero
+    0x24020000, // li      v0,0
+    0x2404000b, // li      a0,11
+    0x3c080000, // lui     t0,0x0
+    0x25081028, // addiu   t0,t0,4136
+    0x0100f809, // jalr    t0
+    0x00000000, // nop
+    0x90480000, // lbu     t0,0(v0)
+    0x9048ffff, // lbu     t0,-1(v0)
+    0x00000000, // nop
+
+    /* 00001028 <malloc>: */
+    0x03e00008, // jr      ra
+    0x00000000, // nop
+
+    /* 00001030 <free>: */
+    0x03e00008, // jr      ra
+    0x00000000, // nop
+
 };
 
 static const uint8_t shellcode_oob_access_1b[] = {
@@ -140,4 +216,68 @@ TEST(SanitizerDeathTest, OverflowAccess8B) {
     EXPECT_EQ(lfu_replace_allocator(start + 0x17, start + 0x18, 0x1000), UC_ERR_OK);
     EXPECT_EXIT(uc_emu_start(uc, start, start + 0x18, 0, 0), testing::KilledBySignal(SIGABRT),
                 "invalid memory access @ .*4 of size 8");
+}
+
+TEST(SanitizerDeathTest, Mips32LeOverflowAccess1B) {
+    State::the(true);
+
+    uc_engine* uc;
+    uc_err err = uc_open(UC_ARCH_MIPS, uc_mode(UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN), &uc);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    lfu_init_engine(uc);
+
+    const uint64_t start =
+        lfu_mmap(0x1000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_EXEC, ".text");
+    EXPECT_EQ(start, 0x1000);
+
+    uint32_t stack =
+        lfu_mmap(0x10000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_WRITE, "[stack]");
+    EXPECT_NE(stack, 0);
+
+    stack += MemoryMap::PAGE_SIZE - 8;
+
+    err = uc_mem_write(uc, start, shellcode_mips32_le_oob_1b,
+                       sizeof(shellcode_mips32_le_oob_1b) * sizeof(uint32_t));
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    err = uc_reg_write(uc, UC_MIPS_REG_SP, &stack);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    EXPECT_EQ(lfu_replace_allocator(start + 0x28, start + 0x30, 0x1000), UC_ERR_OK);
+
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 0), testing::KilledBySignal(SIGABRT),
+                "invalid memory access @ 210b of size 1");
+}
+
+TEST(SanitizerDeathTest, Mips32LeUnderflowAccess1B) {
+    State::the(true);
+
+    uc_engine* uc;
+    uc_err err = uc_open(UC_ARCH_MIPS, uc_mode(UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN), &uc);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    lfu_init_engine(uc);
+
+    const uint64_t start =
+        lfu_mmap(0x1000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_EXEC, ".text");
+    EXPECT_EQ(start, 0x1000);
+
+    uint32_t stack =
+        lfu_mmap(0x10000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_WRITE, "[stack]");
+    EXPECT_NE(stack, 0);
+
+    stack += MemoryMap::PAGE_SIZE - 8;
+
+    err = uc_mem_write(uc, start, shellcode_mips32_le_oob_n1b,
+                       sizeof(shellcode_mips32_le_oob_n1b) * sizeof(uint32_t));
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    err = uc_reg_write(uc, UC_MIPS_REG_SP, &stack);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    EXPECT_EQ(lfu_replace_allocator(start + 0x28, start + 0x30, 0x1000), UC_ERR_OK);
+
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 0), testing::KilledBySignal(SIGABRT),
+                "invalid memory access @ 20ff of size 1");
 }

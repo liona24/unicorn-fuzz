@@ -83,7 +83,7 @@ void lfu_init_engine(uc_engine* uc) {
     }
 
     State::the().uc = uc;
-    State::the().abi.reset(new ABIAbstractionX86_64);
+    State::the().abi.reset(IABIAbstraction::for_uc(uc));
     State::the().mmem.reset(new MemoryMap);
 
     State::the().coverage.reset(new Coverage);
