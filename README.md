@@ -2,6 +2,10 @@
 
 Fuzz process snapshots with [unicorn](https://www.unicorn-engine.org/) + [libFuzzer](https://llvm.org/docs/LibFuzzer.html)
 
+Supported architectures:
+- X86 (64 Bit)
+- MIPS 32 LE / BE
+
 ## Building
 
 Tested on Fedora 36. Should work on any linux. No guarantees for any other OS.
