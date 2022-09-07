@@ -6,6 +6,13 @@ Supported architectures:
 - X86 (64 Bit)
 - MIPS 32 LE / BE
 
+Why should you use this over `unicorn-afl`?
+- Everything is in-process, no need for wrappers
+- Custom allocator with rudimentary address sanitizer support
+- Just another fuzzer, may yield better results
+- You may prefer libFuzzer
+- (opinionated) Coverage is better
+
 ## Building
 
 Tested on Fedora 36. Should work on any linux. No guarantees for any other OS.
