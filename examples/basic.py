@@ -48,7 +48,7 @@ def do_fuzzing(snapshot: dict, fuzzArgs: list[str]):
     # uc.hook_add(unicorn.UC_HOOK_CODE, handle_instr)
     # uc.hook_add(unicorn.UC_HOOK_MEM_VALID, handle_mem)
 
-    lfu.start_fuzzer(["-print_pcs=1"], restore, START_ADDR, END_ADDR)
+    lfu.start_fuzzer(fuzzArgs, restore, START_ADDR, END_ADDR)
 
     # restore(b"ABCsdk")
     # print(uc.emu_start(START_ADDR, END_ADDR))

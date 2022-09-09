@@ -47,7 +47,7 @@ def do_fuzzing(snapshot: dict, fuzzArgs: list[str]):
     # uc.hook_add(unicorn.UC_HOOK_CODE, handle_instr)
     # uc.emu_start(START_ADDR, END_ADDR)
 
-    lfu.start_fuzzer([], restore, START_ADDR, END_ADDR)
+    lfu.start_fuzzer(fuzzArgs, restore, START_ADDR, END_ADDR)
 
 
 def main():
