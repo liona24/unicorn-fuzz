@@ -9,6 +9,24 @@
 
 // (arg1, arg2, size in bits)
 using CmpInstrCallback = void(uint64_t, uint64_t, uint32_t);
+struct CmpInstrData {
+    CmpInstrData(uc_engine* uc,
+                 cs_arch arch,
+                 cs_mode mode,
+                 std::function<CmpInstrCallback> callback,
+                 void* hook_ptr);
+    ~CmpInstrData();
+
+    bool is_init { false };
+
+    csh ch { 0 };
+    cs_insn* insn { nullptr };
+
+    uc_engine* uc { nullptr };
+    uc_hook hook { 0 };
+
+    std::function<CmpInstrCallback> callback;
+};
 
 class IABIAbstraction {
 public:
@@ -55,24 +73,6 @@ public:
     void render_crash_context(uc_engine* uc) const final;
 
     void add_additional_cmp_instrumentation(uc_engine*, std::function<CmpInstrCallback>) final;
-
-    struct CmpInstrData {
-        CmpInstrData(uc_engine* uc,
-                     cs_arch arch,
-                     cs_mode mode,
-                     std::function<CmpInstrCallback> callback);
-        ~CmpInstrData();
-
-        bool is_init { false };
-
-        csh ch { 0 };
-        cs_insn* insn { nullptr };
-
-        uc_engine* uc { nullptr };
-        uc_hook hook { 0 };
-
-        std::function<CmpInstrCallback> callback;
-    };
 
 protected:
     virtual cs_mode endianess() const = 0;

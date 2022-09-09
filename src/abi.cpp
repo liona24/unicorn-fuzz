@@ -175,10 +175,11 @@ void ABIAbstractionMips32X::render_crash_context(uc_engine* uc) const {
     print_hex_dump(stack_ptr, stack, sizeof(stack), 4);
 }
 
-ABIAbstractionMips32X::CmpInstrData::CmpInstrData(uc_engine* uc,
-                                                  cs_arch arch,
-                                                  cs_mode mode,
-                                                  std::function<CmpInstrCallback> callback)
+CmpInstrData::CmpInstrData(uc_engine* uc,
+                           cs_arch arch,
+                           cs_mode mode,
+                           std::function<CmpInstrCallback> callback,
+                           void* hook_ptr)
     : uc(uc)
     , callback(callback) {
     cs_err err;
@@ -195,10 +196,16 @@ ABIAbstractionMips32X::CmpInstrData::CmpInstrData(uc_engine* uc,
         return;
     }
 
+    uc_err uerr = uc_hook_add(uc, &hook, UC_HOOK_CODE, hook_ptr, (void*)this, 1, 0);
+    if (uerr != UC_ERR_OK) {
+        WARN("error adding cmp instrumentation hook: %s", uc_strerror(uerr));
+        return;
+    }
+
     is_init = true;
 }
 
-ABIAbstractionMips32X::CmpInstrData::~CmpInstrData() {
+CmpInstrData::~CmpInstrData() {
     if (ch) {
         if (insn) {
             cs_free(insn, 1);
@@ -246,8 +253,7 @@ static void additional_instr_hook_mips(uc_engine* uc,
                                        void* user_data) {
     assert(size == 4 && "this does not seem to be mips32?");
 
-    ABIAbstractionMips32X::CmpInstrData* d =
-        reinterpret_cast<ABIAbstractionMips32X::CmpInstrData*>(user_data);
+    CmpInstrData* d = reinterpret_cast<CmpInstrData*>(user_data);
 
     uint8_t code[4] = { 0 };
     uc_err err = uc_mem_read(uc, addr, code, size);
@@ -294,17 +300,9 @@ void ABIAbstractionMips32X::add_additional_cmp_instrumentation(
     uc_engine* uc,
     std::function<CmpInstrCallback> cmp_callback) {
 
-    instr_.reset(
-        new CmpInstrData(uc, CS_ARCH_MIPS, cs_mode(CS_MODE_MIPS32 | endianess()), cmp_callback));
+    instr_.reset(new CmpInstrData(uc, CS_ARCH_MIPS, cs_mode(CS_MODE_MIPS32 | endianess()),
+                                  cmp_callback, (void*)&additional_instr_hook_mips));
     if (!instr_->is_init) {
-        WARN("continuing without additional coverage instrumentation!");
-        return;
-    }
-
-    uc_err err = uc_hook_add(uc, &instr_->hook, UC_HOOK_CODE, (void*)&additional_instr_hook_mips,
-                             (void*)instr_.get(), 1, 0);
-    if (err != UC_ERR_OK) {
-        WARN("error adding cmp instrumentation hook: %s", uc_strerror(err));
         WARN("continuing without additional coverage instrumentation!");
         return;
     }
