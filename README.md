@@ -9,9 +9,9 @@ Supported architectures:
 Why should you use this over `unicorn-afl`?
 - Everything is in-process, no need for wrappers
 - Custom allocator with rudimentary address sanitizer support
+- (opinionated) Coverage instrumentation is better
 - Just another fuzzer, may yield better results
 - You may prefer libFuzzer
-- (opinionated) Coverage is better
 
 ## Building
 
@@ -19,9 +19,11 @@ Tested on Fedora 36. Should work on any linux. No guarantees for any other OS.
 
 Install build dependencies:
 ```
-sudo dnf install cmake ninja pkg-config llvm-devel gtest-devel clang
+sudo dnf install cmake ninja pkg-config llvm-devel gtest-devel clang capstone-devel
 ```
 (gtest is optional, used for tests)
+
+(capstone is required to support additional coverage instrumentation, technically you could build without it)
 
 Build using CMake:
 ```
@@ -80,3 +82,5 @@ Base64: QRE+
 ```
 
 There is also a more complex example `examples/int_overflow` which will use some of the address sanitizer features as well as more coverage instrumentation.
+
+After that you may easily set up a template for your own binary using `python3 -m lfu generate -h`
