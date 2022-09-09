@@ -1,8 +1,14 @@
 #pragma once
 
+#include <functional>
+#include <memory>
 #include <vector>
 
+#include <capstone/capstone.h>
 #include <unicorn/unicorn.h>
+
+// (arg1, arg2, size in bits)
+using CmpInstrCallback = void(uint64_t, uint64_t, uint32_t);
 
 class IABIAbstraction {
 public:
@@ -15,6 +21,8 @@ public:
     virtual const std::vector<uint8_t>& ret_instr() const = 0;
 
     virtual void render_crash_context(uc_engine* uc) const = 0;
+
+    virtual void add_additional_cmp_instrumentation(uc_engine*, std::function<CmpInstrCallback>) {}
 
     static IABIAbstraction* for_uc(uc_engine* uc);
 
@@ -46,7 +54,31 @@ public:
 
     void render_crash_context(uc_engine* uc) const final;
 
+    void add_additional_cmp_instrumentation(uc_engine*, std::function<CmpInstrCallback>) final;
+
+    struct CmpInstrData {
+        CmpInstrData(uc_engine* uc,
+                     cs_arch arch,
+                     cs_mode mode,
+                     std::function<CmpInstrCallback> callback);
+        ~CmpInstrData();
+
+        bool is_init { false };
+
+        csh ch { 0 };
+        cs_insn* insn { nullptr };
+
+        uc_engine* uc { nullptr };
+        uc_hook hook { 0 };
+
+        std::function<CmpInstrCallback> callback;
+    };
+
 protected:
+    virtual cs_mode endianess() const = 0;
+
+    std::unique_ptr<CmpInstrData> instr_;
+
     static const std::vector<uint8_t> ret_instr_le;
 };
 
@@ -55,6 +87,9 @@ public:
     virtual ~ABIAbstractionMips32BE() override = default;
 
     const std::vector<uint8_t>& ret_instr() const final;
+
+protected:
+    cs_mode endianess() const final;
 };
 
 class ABIAbstractionMips32LE : public ABIAbstractionMips32X {
@@ -62,4 +97,7 @@ public:
     virtual ~ABIAbstractionMips32LE() override = default;
 
     const std::vector<uint8_t>& ret_instr() const final;
+
+protected:
+    cs_mode endianess() const final;
 };

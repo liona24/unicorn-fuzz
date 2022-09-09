@@ -180,9 +180,14 @@ int Coverage::enable_instrumentation() {
             err = uc_hook_add(state.uc, &h_cmp_, UC_HOOK_TCG_OPCODE, (void*)&hook_insn_cmp,
                               (void*)this, 1, 0, UC_TCG_OP_SUB, flags);
             if (err != UC_ERR_OK) {
-                WARN("could not add cmp hook! continuing without cmp instrumentation (%s)",
+                WARN("could not add cmp hook! continuing without basic cmp instrumentation (%s)",
                      uc_strerror(err));
             }
+
+            auto callback = [&state, this](uint64_t arg1, uint64_t arg2, uint32_t size) {
+                hook_insn_cmp(state.uc, -1, arg1, arg2, size, (void*)this);
+            };
+            state.abi->add_additional_cmp_instrumentation(state.uc, callback);
         }
     }
 

@@ -1,11 +1,14 @@
 #include "abi.h"
 
+#include <cassert>
 #include <map>
 #include <stdio.h>
 #include <string>
 
+#include "capstone.h"
 #include "defs.h"
 
+#include "mips.h"
 #include "unicorn/mips.h"
 #include "unicorn/unicorn.h"
 #include "unicorn/x86.h"
@@ -172,11 +175,152 @@ void ABIAbstractionMips32X::render_crash_context(uc_engine* uc) const {
     print_hex_dump(stack_ptr, stack, sizeof(stack), 4);
 }
 
+ABIAbstractionMips32X::CmpInstrData::CmpInstrData(uc_engine* uc,
+                                                  cs_arch arch,
+                                                  cs_mode mode,
+                                                  std::function<CmpInstrCallback> callback)
+    : uc(uc)
+    , callback(callback) {
+    cs_err err;
+
+    if ((err = cs_open(arch, mode, &ch)) != CS_ERR_OK ||
+        (err = cs_option(ch, CS_OPT_DETAIL, CS_OPT_ON)) != CS_ERR_OK) {
+        WARN("failed to initialize capstone: %s", cs_strerror(err));
+        return;
+    }
+
+    insn = cs_malloc(ch);
+    if (insn == nullptr) {
+        WARN("could not allocate insn buffer: %s", cs_strerror(cs_errno(ch)));
+        return;
+    }
+
+    is_init = true;
+}
+
+ABIAbstractionMips32X::CmpInstrData::~CmpInstrData() {
+    if (ch) {
+        if (insn) {
+            cs_free(insn, 1);
+            insn = nullptr;
+        }
+
+        cs_close(&ch);
+        ch = 0;
+    }
+
+    if (hook) {
+        uc_hook_del(uc, hook);
+        hook = 0;
+    }
+}
+
+static bool get_value_of_operand_mips(uc_engine* uc, const cs_mips_op& op, uint32_t& out) {
+    switch (op.type) {
+    case MIPS_OP_REG: {
+        static_assert((int)MIPS_REG_0 == UC_MIPS_REG_0,
+                      "capstone and unicorn registers are incompatible!");
+
+        uc_err err = uc_reg_read(uc, (int)op.reg, &out);
+        if (err != UC_ERR_OK) {
+            TRACE("register reading failed: %s", uc_strerror(err));
+            return false;
+        }
+        break;
+    }
+    case MIPS_OP_IMM:
+        out = static_cast<uint32_t>(op.imm);
+        break;
+    case MIPS_OP_MEM:
+    case MIPS_OP_INVALID:
+        // we do not handle those
+        return false;
+    }
+
+    return true;
+}
+
+static void additional_instr_hook_mips(uc_engine* uc,
+                                       uint64_t addr,
+                                       uint32_t size,
+                                       void* user_data) {
+    assert(size == 4 && "this does not seem to be mips32?");
+
+    ABIAbstractionMips32X::CmpInstrData* d =
+        reinterpret_cast<ABIAbstractionMips32X::CmpInstrData*>(user_data);
+
+    uint8_t code[4] = { 0 };
+    uc_err err = uc_mem_read(uc, addr, code, size);
+    if (err != UC_ERR_OK) {
+        TRACE("reading instruction failed: %s", uc_strerror(err));
+        return;
+    }
+
+    const uint8_t* code_p = code;
+    size_t size_copy = size;
+    uint64_t addr_copy = addr;
+
+    if (!cs_disasm_iter(d->ch, &code_p, &size_copy, &addr_copy, d->insn)) {
+        TRACE("decoding instruction failed: %s", cs_strerror(cs_errno(d->ch)));
+        return;
+    }
+
+    if (!cs_insn_group(d->ch, d->insn, CS_GRP_JUMP)) {
+        return;
+    }
+    TRACE("[%lx] %s\t%s", addr, d->insn->mnemonic, d->insn->op_str);
+
+    // Conditional jumps which compare one/two registers / immediates
+    // in case of 3 operands, the first and second operand can be fetched
+    // in case of 2 operands, the compared value will be zero
+    // in any case, the last operand will be the branch target
+    uint32_t operands[2] = { 0 };
+    const uint8_t op_count = d->insn->detail->mips.op_count;
+    if (op_count == 3 || op_count == 2) {
+        // the first n - 1 operands will be the registers to compare
+        for (int i = 0; i < op_count - 1; i++) {
+            if (!get_value_of_operand_mips(uc, d->insn->detail->mips.operands[i], operands[i])) {
+                // could not get concrete value, ignore
+                return;
+            }
+        }
+
+        constexpr uint32_t size = 32;
+        d->callback(operands[0], operands[1], size);
+    }
+}
+
+void ABIAbstractionMips32X::add_additional_cmp_instrumentation(
+    uc_engine* uc,
+    std::function<CmpInstrCallback> cmp_callback) {
+
+    instr_.reset(
+        new CmpInstrData(uc, CS_ARCH_MIPS, cs_mode(CS_MODE_MIPS32 | endianess()), cmp_callback));
+    if (!instr_->is_init) {
+        WARN("continuing without additional coverage instrumentation!");
+        return;
+    }
+
+    uc_err err = uc_hook_add(uc, &instr_->hook, UC_HOOK_CODE, (void*)&additional_instr_hook_mips,
+                             (void*)instr_.get(), 1, 0);
+    if (err != UC_ERR_OK) {
+        WARN("error adding cmp instrumentation hook: %s", uc_strerror(err));
+        WARN("continuing without additional coverage instrumentation!");
+        return;
+    }
+
+    TRACE("enabled additional coverage instrumentation hooks");
+}
+
+cs_mode ABIAbstractionMips32BE::endianess() const { return CS_MODE_BIG_ENDIAN; }
+
 const std::vector<uint8_t>& ABIAbstractionMips32BE::ret_instr() const {
     static const std::vector<uint8_t> ret { 0x03, 0xe0, 0x00, 0x08 };
 
     return ret;
 }
+
+cs_mode ABIAbstractionMips32LE::endianess() const { return CS_MODE_LITTLE_ENDIAN; }
 
 const std::vector<uint8_t>& ABIAbstractionMips32LE::ret_instr() const {
     static const std::vector<uint8_t> ret { 0x08, 0x00, 0xe0, 0x03 };
