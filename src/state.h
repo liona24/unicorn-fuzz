@@ -42,6 +42,13 @@ struct Patch {
 struct State {
     explicit State() {}
 
+    ~State() {
+        if (uc && context) {
+            uc_context_free(context);
+            context = nullptr;
+        }
+    }
+
     static State& the(bool reset = false) {
         thread_local static std::unique_ptr<State> instance { nullptr };
 
@@ -59,6 +66,7 @@ struct State {
 
     // Address range to simulate for each input
     uint64_t begin, until;
+    uc_context* context { nullptr };
     init_context init_context_callback { nullptr };
 
     std::unique_ptr<MemoryMap> mmem { nullptr };

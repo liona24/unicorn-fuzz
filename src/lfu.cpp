@@ -20,8 +20,6 @@
 extern "C" {
 #endif
 
-// TODO: Coverage stuff goes here
-
 extern "C" int LLVMFuzzerRunDriver(int* argc,
                                    char*** argv,
                                    int (*UserCb)(const uint8_t* Data, size_t Size));
@@ -35,6 +33,13 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     assert(state.init_context_callback != nullptr &&
            "fuzzing should not be started without an initialization routine");
 
+    assert(state.context && "context should have been initialized");
+    uc_err err = uc_context_restore(state.uc, state.context);
+    if (err != UC_ERR_OK) {
+        WARN("error during context restore: %s", uc_strerror(err));
+        abort();
+    }
+
     if (state.init_context_callback(data, size)) {
         return -1;
     }
@@ -47,7 +52,7 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
         patch.apply(state.uc);
     }
 
-    uc_err err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
+    err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
     if (err != UC_ERR_OK) {
         WARN("error: %s", uc_strerror(err));
         state.render_crash_context();
@@ -110,6 +115,23 @@ int lfu_start_fuzzer(int argc,
     state.init_context_callback = init_context_callback;
     state.begin = begin;
     state.until = until;
+
+    if (state.context) {
+        uc_context_free(state.context);
+        state.context = nullptr;
+    }
+
+    uc_err err = uc_context_alloc(state.uc, &state.context);
+    if (err != UC_ERR_OK) {
+        WARN("could not allocate uc_context: %s", uc_strerror(err));
+        return -1;
+    }
+
+    err = uc_context_save(state.uc, state.context);
+    if (err != UC_ERR_OK) {
+        WARN("could not save uc context: %s", uc_strerror(err));
+        return -1;
+    }
 
     return LLVMFuzzerRunDriver(&argc, &argv, fuzz_one_input);
 }
