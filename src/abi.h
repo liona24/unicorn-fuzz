@@ -101,3 +101,15 @@ public:
 protected:
     cs_mode endianess() const final;
 };
+
+class ABIAbstractionArm32EABI : public IABIAbstraction {
+    virtual ~ABIAbstractionArm32EABI() override = default;
+
+    uint64_t read_arg0(uc_engine* uc) const final;
+    uint64_t read_arg1(uc_engine* uc) const final;
+    void set_ret(uc_engine* uc, uint64_t val) const final;
+
+    const std::vector<uint8_t>& ret_instr() const final;
+
+    void render_crash_context(uc_engine* uc) const final;
+};

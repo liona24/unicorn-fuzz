@@ -29,7 +29,7 @@ IABIAbstraction* IABIAbstraction::for_uc(uc_engine* uc) {
         goto error;
     }
 
-#define HAS(m) ((mode & m) != 0)
+#define HAS(m) ((mode & m) != 0 || mode == 0)
 
     switch (arch) {
     case UC_ARCH_X86:
@@ -44,6 +44,11 @@ IABIAbstraction* IABIAbstraction::for_uc(uc_engine* uc) {
             } else {
                 return new ABIAbstractionMips32LE;
             }
+        }
+        break;
+    case UC_ARCH_ARM:
+        if (HAS(UC_MODE_ARM)) {
+            return new ABIAbstractionArm32EABI;
         }
         break;
     default:
@@ -115,6 +120,15 @@ static const std::map<uint32_t, std::string> MIPS32_REGS = {
     { UC_MIPS_REG_A3, "a3" }, { UC_MIPS_REG_V0, "v0" }, { UC_MIPS_REG_V1, "v1" },
     { UC_MIPS_REG_GP, "gp" }, { UC_MIPS_REG_SP, "sp" }, { UC_MIPS_REG_FP, "fp" },
     { UC_MIPS_REG_RA, "ra" }, { UC_MIPS_REG_PC, "pc" },
+};
+
+static const std::map<uint32_t, std::string> ARM32_REGS = {
+    { UC_ARM_REG_R0, "r0" },   { UC_ARM_REG_R1, "r1" },     { UC_ARM_REG_R2, "r2" },
+    { UC_ARM_REG_R3, "r3" },   { UC_ARM_REG_R4, "r4" },     { UC_ARM_REG_R5, "r5" },
+    { UC_ARM_REG_R6, "r6" },   { UC_ARM_REG_R7, "r7" },     { UC_ARM_REG_R8, "r8" },
+    { UC_ARM_REG_R9, "r9" },   { UC_ARM_REG_R10, "r10" },   { UC_ARM_REG_R11, "r11" },
+    { UC_ARM_REG_R12, "r12" }, { UC_ARM_REG_SP, "sp" },     { UC_ARM_REG_LR, "lr" },
+    { UC_ARM_REG_PC, "pc" },   { UC_ARM_REG_CPSR, "cpsr" },
 };
 
 uint64_t ABIAbstractionX86_64::read_arg0(uc_engine* uc) const {
@@ -322,6 +336,38 @@ cs_mode ABIAbstractionMips32LE::endianess() const { return CS_MODE_LITTLE_ENDIAN
 
 const std::vector<uint8_t>& ABIAbstractionMips32LE::ret_instr() const {
     static const std::vector<uint8_t> ret { 0x08, 0x00, 0xe0, 0x03 };
+
+    return ret;
+}
+
+uint64_t ABIAbstractionArm32EABI::read_arg0(uc_engine* uc) const {
+    return read_reg_wrapper(uc, UC_ARM_REG_R0);
+}
+uint64_t ABIAbstractionArm32EABI::read_arg1(uc_engine* uc) const {
+    return read_reg_wrapper(uc, UC_ARM_REG_R1);
+}
+void ABIAbstractionArm32EABI::set_ret(uc_engine* uc, uint64_t val) const {
+    write_reg_wrapper(uc, UC_ARM_REG_R0, val);
+}
+
+void ABIAbstractionArm32EABI::render_crash_context(uc_engine* uc) const {
+    eprintf("registers:\n");
+    for (const auto& pair : ARM32_REGS) {
+        uint32_t val;
+        uc_reg_read(uc, pair.first, &val);
+        eprintf(" %s\t= %08x\n", pair.second.c_str(), val);
+    }
+    eprintf("stack dump:\n");
+
+    uint8_t stack[32];
+    uint32_t stack_ptr;
+    uc_reg_read(uc, UC_ARM_REG_SP, &stack_ptr);
+    uc_mem_read(uc, stack_ptr, stack, sizeof(stack));
+    print_hex_dump(stack_ptr, stack, sizeof(stack), 4);
+}
+
+const std::vector<uint8_t>& ABIAbstractionArm32EABI::ret_instr() const {
+    static const std::vector<uint8_t> ret { 0x1e, 0xff, 0x2f, 0xe1 };
 
     return ret;
 }

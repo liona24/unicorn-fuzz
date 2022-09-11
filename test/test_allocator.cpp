@@ -101,6 +101,50 @@ static const uint32_t shellcode_mips32_le_oob_n1b[] = {
 
 };
 
+/*
+# Code:
+# compile with
+# clang -c -target armv7-pc-linux-eabi -mcpu=cortex-a15 test/simple_code_arm.s
+# you may need to link as well, the bl instruction does not seem to get resolved?
+.section .text
+
+    .globl _start
+
+    .space 0x1000
+
+    _start:
+        mov r0, $11
+        bl malloc
+
+        ldr r1,[r0,$10]
+        ldr r1,[r0,$11]
+
+        nop
+
+    malloc:
+        # stub, will be intercepted by our runtime
+        nop
+
+    free:
+        # stub, will be intercepted by our runtime
+        nop
+*/
+
+static const uint32_t shellcode_arm32_le_oob_1b[] = {
+    /* 00001000 <_start>: */
+    0xe3a0000b, // mov     r0, #11
+    0xeb000002, // bl      1014 <malloc>
+    0xe590100a, // ldr     r1, [r0, #10]
+    0xe590100b, // ldr     r1, [r0, #11]
+    0xe320f000, // nop     {0}
+
+    /* 00001014 <malloc>: */
+    0xe320f000, // nop     {0}
+
+    /* 00001018 <free>: */
+    0xe320f000, // nop     {0}
+};
+
 static const uint8_t shellcode_oob_access_1b[] = {
     /* 0000000000000000 <_start>: */
     0x48, 0x31, 0xc0,                         // xor    %rax,%rax
@@ -156,7 +200,7 @@ TEST(SanitizerDeathTest, Sanity) {
     EXPECT_EQ(err, UC_ERR_OK);
 
     EXPECT_EQ(lfu_replace_allocator(start + 0x17, start + 0x18, 0x1000), UC_ERR_OK);
-    err = uc_emu_start(uc, start, start + 0x16, 0, 0);
+    err = uc_emu_start(uc, start, start + 0x16, 0, 123);
     EXPECT_EQ(err, UC_ERR_OK);
 }
 
@@ -185,7 +229,7 @@ TEST(SanitizerDeathTest, OverflowAccess1B) {
     EXPECT_EQ(err, UC_ERR_OK);
 
     EXPECT_EQ(lfu_replace_allocator(start + 0x15, start + 0x16, 0x1000), UC_ERR_OK);
-    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x16, 0, 0), testing::KilledBySignal(SIGABRT),
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x16, 0, 123), testing::KilledBySignal(SIGABRT),
                 "invalid memory access @ .*b of size 1");
 }
 
@@ -214,7 +258,7 @@ TEST(SanitizerDeathTest, OverflowAccess8B) {
     EXPECT_EQ(err, UC_ERR_OK);
 
     EXPECT_EQ(lfu_replace_allocator(start + 0x17, start + 0x18, 0x1000), UC_ERR_OK);
-    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x18, 0, 0), testing::KilledBySignal(SIGABRT),
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x18, 0, 123), testing::KilledBySignal(SIGABRT),
                 "invalid memory access @ .*4 of size 8");
 }
 
@@ -246,7 +290,7 @@ TEST(SanitizerDeathTest, Mips32LeOverflowAccess1B) {
 
     EXPECT_EQ(lfu_replace_allocator(start + 0x28, start + 0x30, 0x1000), UC_ERR_OK);
 
-    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 0), testing::KilledBySignal(SIGABRT),
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 123), testing::KilledBySignal(SIGABRT),
                 "invalid memory access @ 210b of size 1");
 }
 
@@ -278,6 +322,38 @@ TEST(SanitizerDeathTest, Mips32LeUnderflowAccess1B) {
 
     EXPECT_EQ(lfu_replace_allocator(start + 0x28, start + 0x30, 0x1000), UC_ERR_OK);
 
-    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 0), testing::KilledBySignal(SIGABRT),
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x24, 0, 123), testing::KilledBySignal(SIGABRT),
                 "invalid memory access @ 20ff of size 1");
+}
+
+TEST(SanitizerDeathTest, Arm32LeOverflowAccess1B) {
+    State::the(true);
+
+    uc_engine* uc;
+    uc_err err = uc_open(UC_ARCH_ARM, UC_MODE_ARM, &uc);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    lfu_init_engine(uc);
+
+    const uint64_t start =
+        lfu_mmap(0x1000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_EXEC, ".text");
+    EXPECT_EQ(start, 0x1000);
+
+    uint32_t stack =
+        lfu_mmap(0x10000, MemoryMap::PAGE_SIZE, UC_PROT_READ | UC_PROT_WRITE, "[stack]");
+    EXPECT_NE(stack, 0);
+
+    stack += MemoryMap::PAGE_SIZE - 8;
+
+    err = uc_mem_write(uc, start, shellcode_arm32_le_oob_1b,
+                       sizeof(shellcode_arm32_le_oob_1b) * sizeof(uint32_t));
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    err = uc_reg_write(uc, UC_ARM_REG_SP, &stack);
+    EXPECT_EQ(err, UC_ERR_OK);
+
+    EXPECT_EQ(lfu_replace_allocator(start + 0x14, start + 0x18, 0x1000), UC_ERR_OK);
+
+    EXPECT_EXIT(uc_emu_start(uc, start, start + 0x10, 0, 123), testing::KilledBySignal(SIGABRT),
+                "invalid memory access @ 210a of size 4");
 }

@@ -3,10 +3,11 @@ from dataclasses import dataclass
 import json
 import zlib
 
-from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_ARCH_MIPS, UC_MODE_32
+from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_ARCH_MIPS, UC_MODE_32, UC_ARCH_ARM, UC_MODE_ARM
 import unicorn.unicorn_const as unicorn_const
 import unicorn.x86_const as x86
 import unicorn.mips_const as mips
+import unicorn.arm_const as arm
 
 from lfu.bind import map_memory, init_engine
 
@@ -32,6 +33,7 @@ class ArchConfig():
 SUPPORTED_ARCHS = {
     "mips:isa32r2": ArchConfig((UC_ARCH_MIPS, UC_MODE_32), mips, "UC_MIPS_REG_"),
     "i386:x86-64": ArchConfig((UC_ARCH_X86, UC_MODE_64), x86, "UC_X86_REG_"),
+    "armv5t": ArchConfig((UC_ARCH_ARM, UC_MODE_ARM), arm, "UC_ARM_REG_"),
 }
 
 
