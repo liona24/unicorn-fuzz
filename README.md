@@ -5,6 +5,7 @@ Fuzz process snapshots with [unicorn](https://www.unicorn-engine.org/) + [libFuz
 Supported architectures:
 - X86 (64 Bit)
 - MIPS 32 LE / BE
+- ARM 32 LE (linux-gnueabi)
 
 Why should you use this over `unicorn-afl`?
 - Everything is in-process, no need for wrappers
