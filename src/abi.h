@@ -7,6 +7,10 @@
 #include <capstone/capstone.h>
 #include <unicorn/unicorn.h>
 
+#include "defs.h"
+
+class IABIAbstraction;
+
 // (arg1, arg2, size in bits)
 using CmpInstrCallback = void(uint64_t, uint64_t, uint32_t);
 struct CmpInstrData {
@@ -28,9 +32,22 @@ struct CmpInstrData {
     std::function<CmpInstrCallback> callback;
 };
 
+struct InsnTracer {
+    InsnTracer(const IABIAbstraction& abi);
+    ~InsnTracer();
+
+    csh ch { 0 };
+    cs_insn* insn { nullptr };
+    bool is_init { false };
+
+    bool disassemble_one_insn(uint64_t addr, const uint8_t* buffer, size_t size);
+};
+
 class IABIAbstraction {
 public:
     virtual ~IABIAbstraction() = default;
+
+    virtual std::pair<cs_arch, cs_mode> get_capstone_arch() const = 0;
 
     virtual uint64_t read_arg0(uc_engine* uc) const = 0;
     virtual uint64_t read_arg1(uc_engine* uc) const = 0;
@@ -53,6 +70,8 @@ class ABIAbstractionX86_64 : public IABIAbstraction {
 public:
     virtual ~ABIAbstractionX86_64() override = default;
 
+    std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
+
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;
     void set_ret(uc_engine* uc, uint64_t val) const final;
@@ -65,6 +84,8 @@ public:
 class ABIAbstractionMips32X : public IABIAbstraction {
 public:
     virtual ~ABIAbstractionMips32X() override = default;
+
+    std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
 
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;
@@ -104,6 +125,8 @@ protected:
 
 class ABIAbstractionArm32EABI : public IABIAbstraction {
     virtual ~ABIAbstractionArm32EABI() override = default;
+
+    std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
 
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;

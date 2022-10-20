@@ -131,6 +131,10 @@ static const std::map<uint32_t, std::string> ARM32_REGS = {
     { UC_ARM_REG_PC, "pc" },   { UC_ARM_REG_CPSR, "cpsr" },
 };
 
+std::pair<cs_arch, cs_mode> ABIAbstractionX86_64::get_capstone_arch() const {
+    return std::make_pair(CS_ARCH_X86, CS_MODE_64);
+}
+
 uint64_t ABIAbstractionX86_64::read_arg0(uc_engine* uc) const {
     return read_reg_wrapper(uc, UC_X86_REG_RDI);
 }
@@ -161,6 +165,10 @@ void ABIAbstractionX86_64::render_context(uc_engine* uc) const {
     uc_reg_read(uc, UC_X86_REG_RSP, &stack_ptr);
     uc_mem_read(uc, stack_ptr, stack, sizeof(stack));
     print_hex_dump(stack_ptr, stack, sizeof(stack), 8);
+}
+
+std::pair<cs_arch, cs_mode> ABIAbstractionMips32X::get_capstone_arch() const {
+    return std::make_pair(CS_ARCH_MIPS, cs_mode(CS_MODE_MIPS32 | endianess()));
 }
 
 uint64_t ABIAbstractionMips32X::read_arg0(uc_engine* uc) const {
@@ -220,7 +228,7 @@ CmpInstrData::CmpInstrData(uc_engine* uc,
 }
 
 CmpInstrData::~CmpInstrData() {
-    if (ch) {
+    if (is_init) {
         if (insn) {
             cs_free(insn, 1);
             insn = nullptr;
@@ -228,12 +236,58 @@ CmpInstrData::~CmpInstrData() {
 
         cs_close(&ch);
         ch = 0;
+
+        is_init = false;
     }
 
     if (hook) {
         uc_hook_del(uc, hook);
         hook = 0;
     }
+}
+
+InsnTracer::InsnTracer(const IABIAbstraction& abi) {
+    const auto arch = abi.get_capstone_arch();
+
+    cs_err err = cs_open(arch.first, arch.second, &ch);
+    if (err != CS_ERR_OK) {
+        WARN("failed to initialize capstone: %s", cs_strerror(err));
+        return;
+    }
+
+    insn = cs_malloc(ch);
+    if (insn == nullptr) {
+        WARN("could not allocate insn buffer: %s", cs_strerror(cs_errno(ch)));
+        return;
+    }
+
+    is_init = true;
+}
+
+InsnTracer::~InsnTracer() {
+    if (is_init) {
+        if (insn) {
+            cs_free(insn, 1);
+            insn = nullptr;
+        }
+
+        cs_close(&ch);
+        ch = 0;
+        is_init = false;
+    }
+}
+
+bool InsnTracer::disassemble_one_insn(uint64_t addr, const uint8_t* buffer, size_t size) {
+    if (!is_init) {
+        return false;
+    }
+
+    if (!cs_disasm_iter(ch, &buffer, &size, &addr, insn)) {
+        TRACE("decoding instruction failed: %s", cs_strerror(cs_errno(ch)));
+        return false;
+    }
+
+    return true;
 }
 
 static bool get_value_of_operand_mips(uc_engine* uc, const cs_mips_op& op, uint32_t& out) {
@@ -338,6 +392,10 @@ const std::vector<uint8_t>& ABIAbstractionMips32LE::ret_instr() const {
     static const std::vector<uint8_t> ret { 0x08, 0x00, 0xe0, 0x03 };
 
     return ret;
+}
+
+std::pair<cs_arch, cs_mode> ABIAbstractionArm32EABI::get_capstone_arch() const {
+    return std::make_pair(CS_ARCH_ARM, CS_MODE_ARM);
 }
 
 uint64_t ABIAbstractionArm32EABI::read_arg0(uc_engine* uc) const {

@@ -95,17 +95,26 @@ int setup_for_fuzzing(init_context init_context_callback, uint64_t begin, uint64
 }
 
 void triage_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
-    (void)uc;
-    (void)size;
-    (void)user_data;
-
     auto& state = State::the();
+    auto tracer = static_cast<InsnTracer*>(user_data);
 
-    fprintf(stderr, "\n=> %lx", addr);
+    uint8_t code_buf[32];
+    size = std::min(size, 32u);
+
+    const char* mnemonic = "(bad)";
+    const char* op = "";
+
+    if (uc_mem_read(uc, addr, code_buf, size) == UC_ERR_OK &&
+        tracer->disassemble_one_insn(addr, code_buf, size)) {
+        mnemonic = tracer->insn->mnemonic;
+        op = tracer->insn->op_str;
+    }
+
+    fprintf(stderr, "\n%lx: %s\t%s", addr, mnemonic, op);
 
     const auto map = state.mmem->name_for_map(addr);
     if (map) {
-        fprintf(stderr, " in %s", map->c_str());
+        fprintf(stderr, "\t\tin %s", map->c_str());
     }
 
     fprintf(stderr, "\n");
@@ -176,9 +185,11 @@ void lfu_triage_one_input(init_context init_context_callback,
         return;
     }
 
+    std::unique_ptr<InsnTracer> tracer(new InsnTracer(*State::the().abi));
+
     uc_hook hook;
     uc_err err =
-        uc_hook_add(State::the().uc, &hook, UC_HOOK_CODE, (void*)&triage_hook, nullptr, 1, 0);
+        uc_hook_add(State::the().uc, &hook, UC_HOOK_CODE, (void*)&triage_hook, tracer.get(), 1, 0);
 
     if (err != UC_ERR_OK) {
         WARN("trace hook failed, nothing will be run");
