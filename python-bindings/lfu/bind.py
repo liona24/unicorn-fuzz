@@ -24,6 +24,15 @@ _lfu_start_fuzzer.argtypes = [
 ]
 _lfu_start_fuzzer.restype = ctypes.c_int
 
+_lfu_triage_one_input = LIB.lfu_triage_one_input
+_lfu_triage_one_input.argtypes = [
+    LFU_INIT_CALLBACK_TY,
+    ctypes.c_uint64, # begin
+    ctypes.c_uint64, # until
+    ctypes.c_char_p,
+    ctypes.c_size_t,
+]
+
 _lfu_map_memory = LIB.lfu_mmap
 _lfu_map_memory.argtypes = [
     ctypes.c_uint64,
@@ -40,6 +49,16 @@ _lfu_replace_allocator.argtypes = [
     ctypes.c_size_t,
 ]
 _lfu_replace_allocator.restype = ctypes.c_int
+
+_lfu_replace_allocator2 = LIB.lfu_replace_allocator2
+_lfu_replace_allocator2.argtypes = [
+    ctypes.POINTER(ctypes.c_uint64),
+    ctypes.c_size_t,
+    ctypes.POINTER(ctypes.c_uint64),
+    ctypes.c_size_t,
+    ctypes.c_size_t,
+]
+_lfu_replace_allocator2.restype = ctypes.c_int
 
 _lfu_allocate = LIB.lfu_allocate
 _lfu_allocate.argtypes = [
@@ -59,6 +78,8 @@ _lfu_add_patch.argtypes = [
     ctypes.c_size_t,
     ctypes.c_char_p,
 ]
+
+_lfu_force_crash = LIB.lfu_force_crash
 
 def _wrap_init(init: Callable[[bytes], int]):
 
@@ -87,6 +108,13 @@ def start_fuzzer(argv: list[str], init: Callable[[bytes], int], begin: int, unti
         raise RuntimeError(f"lfu_start_fuzzer exit code {rv}")
 
 
+def triage_one_input(init: Callable[[bytes], int], begin: int, until: int, input: bytes):
+
+    init = _wrap_init(init)
+
+    _lfu_triage_one_input(init, begin, until, input, len(input))
+
+
 def map_memory(addr: int, size: int, perm: int, name: str | None=None):
     if name is None:
         name = ""
@@ -104,6 +132,18 @@ def replace_allocator(malloc_addr: int, free_addr: int, pool_size: int):
     if rv != 0:
         raise RuntimeError(f"lfu_replace_allocator return code {rv}")
 
+def replace_allocator2(malloc_addr: list[int], free_addr: list[int], pool_size: int):
+
+    m_size = len(malloc_addr)
+    f_size = len(free_addr)
+
+    mallocs = (ctypes.c_uint64 * m_size)(*malloc_addr)
+    frees = (ctypes.c_uint64 * f_size)(*free_addr)
+
+    rv = _lfu_replace_allocator2(mallocs, m_size, frees, f_size, pool_size)
+
+    if rv != 0:
+        raise RuntimeError(f"lfu_replace_allocator2 return code {rv}")
 
 def allocate(size: int) -> int:
     return _lfu_allocate(size)
@@ -115,3 +155,7 @@ def deallocate(addr: int) -> int:
 
 def add_patch(addr: int, patch: bytes, name: str | None=None):
     _lfu_add_patch(addr, patch, len(patch), name.encode())
+
+
+def force_crash():
+    _lfu_force_crash()

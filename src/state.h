@@ -59,7 +59,7 @@ struct State {
         return *instance.get();
     }
 
-    void render_crash_context() { abi->render_crash_context(uc); }
+    void render_context() { abi->render_context(uc); }
 
     uc_engine* uc { nullptr };
     std::unique_ptr<IABIAbstraction> abi { nullptr };
@@ -73,8 +73,8 @@ struct State {
     std::unique_ptr<Allocator> allocator { nullptr };
     std::unique_ptr<Coverage> coverage { nullptr };
 
-    uc_hook h_malloc;
-    uc_hook h_free;
+    std::vector<uc_hook> h_malloc;
+    std::vector<uc_hook> h_free;
 
     std::list<Patch> patches {};
 };

@@ -34,6 +34,7 @@ SUPPORTED_ARCHS = {
     "mips:isa32r2": ArchConfig((UC_ARCH_MIPS, UC_MODE_32), mips, "UC_MIPS_REG_"),
     "i386:x86-64": ArchConfig((UC_ARCH_X86, UC_MODE_64), x86, "UC_X86_REG_"),
     "armv5t": ArchConfig((UC_ARCH_ARM, UC_MODE_ARM), arm, "UC_ARM_REG_"),
+    "armv7": ArchConfig((UC_ARCH_ARM, UC_MODE_ARM), arm, "UC_ARM_REG_"),
 }
 
 
@@ -92,10 +93,12 @@ def restore(file_or_obj, uc: Uc | None = None, ignore_ro=True):
             map_memory(start, size, perm, mapp["path"])
 
     for addr, mem in snap["memory"].items():
+        addr = int(addr)
+
         if ignore_ro and not addr in writable:
             continue
 
-        uc.mem_write(int(addr), decompress_mem(mem))
+        uc.mem_write(addr, decompress_mem(mem))
 
     WARN_ONCE[0] = False
     return uc

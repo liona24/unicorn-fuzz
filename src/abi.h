@@ -38,7 +38,7 @@ public:
 
     virtual const std::vector<uint8_t>& ret_instr() const = 0;
 
-    virtual void render_crash_context(uc_engine* uc) const = 0;
+    virtual void render_context(uc_engine* uc) const = 0;
 
     virtual void add_additional_cmp_instrumentation(uc_engine*, std::function<CmpInstrCallback>) {}
 
@@ -59,7 +59,7 @@ public:
 
     const std::vector<uint8_t>& ret_instr() const final;
 
-    void render_crash_context(uc_engine* uc) const final;
+    void render_context(uc_engine* uc) const final;
 };
 
 class ABIAbstractionMips32X : public IABIAbstraction {
@@ -70,7 +70,7 @@ public:
     uint64_t read_arg1(uc_engine* uc) const final;
     void set_ret(uc_engine* uc, uint64_t val) const final;
 
-    void render_crash_context(uc_engine* uc) const final;
+    void render_context(uc_engine* uc) const final;
 
     void add_additional_cmp_instrumentation(uc_engine*, std::function<CmpInstrCallback>) final;
 
@@ -111,5 +111,5 @@ class ABIAbstractionArm32EABI : public IABIAbstraction {
 
     const std::vector<uint8_t>& ret_instr() const final;
 
-    void render_crash_context(uc_engine* uc) const final;
+    void render_context(uc_engine* uc) const final;
 };

@@ -29,11 +29,26 @@ EXPORT int lfu_start_fuzzer(int argc,
                             uint64_t begin,
                             uint64_t until);
 
+// Do not run the fuzzer but test this input and print a lot of debugging information (such as
+// execution traces, memory etc.)
+EXPORT void lfu_triage_one_input(init_context init_context_callback,
+                                 uint64_t begin,
+                                 uint64_t until,
+                                 const uint8_t* input,
+                                 size_t input_size);
+
 // Convenience function to replace the default libc malloc / free allocator with a custom one
 // This custom allocator employs shadow memory to detect simple memory bugs.
 // Furthermore, the allocator is very simple, thus restricts memory allocations to a total of the
 // given pool size. The allocated memory is reset for each fuzz run
 EXPORT int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_size);
+// Same as lfu_replace_allocator except that you can pass multiple functions which are treated as an
+// allocator / deallocator
+EXPORT int lfu_replace_allocator2(const uint64_t malloc_addr[],
+                                  size_t malloc_addr_size,
+                                  const uint64_t free_addr[],
+                                  size_t free_addr_size,
+                                  size_t pool_size);
 
 // Wrapper for uc_mem_map for internal book keeping. Use this if you want the custom allocator to
 // work properly
@@ -47,6 +62,9 @@ EXPORT void lfu_deallocate(uint64_t addr);
 // Add a patch for the fuzz target. This patch will be applied on every run.
 // You may optionally specify a name for debugging purposes.
 EXPORT void lfu_add_patch(uint64_t addr, const uint8_t* patch, size_t size, const char* name);
+
+// Force a crash and render the current CPU context
+EXPORT void lfu_force_crash();
 
 #ifdef __cplusplus
 } // extern "C"

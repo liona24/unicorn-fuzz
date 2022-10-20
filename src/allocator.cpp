@@ -57,6 +57,7 @@ uint64_t MemoryMap::mmap(uint64_t addr, uint64_t size, int perm, const std::stri
         }
     }
 
+    TRACE("mmap(%lx, %lu) %s", addr, size, name.c_str());
     uc_err err = uc_mem_map(State::the().uc, addr, size, perm);
 
     if (err != UC_ERR_OK) {
@@ -66,6 +67,20 @@ uint64_t MemoryMap::mmap(uint64_t addr, uint64_t size, int perm, const std::stri
         maps_.try_emplace(addr, size, perm, name);
         return addr;
     }
+}
+
+const std::string* MemoryMap::name_for_map(uint64_t addr) const {
+
+    auto lower = maps_.lower_bound(addr);
+    if (lower != maps_.end()) {
+        const uint64_t upper = lower->first + lower->second.size;
+
+        if (upper >= addr) {
+            return &lower->second.name;
+        }
+    }
+
+    return nullptr;
 }
 
 uint64_t Allocator::alloc(uint64_t size) {
@@ -232,6 +247,6 @@ void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_
     }
     fprintf(stderr, "\n");
 
-    State::the().render_crash_context();
+    State::the().render_context();
     abort();
 }

@@ -147,7 +147,7 @@ const std::vector<uint8_t>& ABIAbstractionX86_64::ret_instr() const {
     return ret;
 }
 
-void ABIAbstractionX86_64::render_crash_context(uc_engine* uc) const {
+void ABIAbstractionX86_64::render_context(uc_engine* uc) const {
     eprintf("registers:\n");
     for (const auto& pair : X86_64_REGS) {
         uint64_t val;
@@ -173,7 +173,7 @@ void ABIAbstractionMips32X::set_ret(uc_engine* uc, uint64_t val) const {
     write_reg_wrapper(uc, UC_MIPS_REG_V0, val);
 }
 
-void ABIAbstractionMips32X::render_crash_context(uc_engine* uc) const {
+void ABIAbstractionMips32X::render_context(uc_engine* uc) const {
     eprintf("registers:\n");
     for (const auto& pair : MIPS32_REGS) {
         uint32_t val;
@@ -350,7 +350,7 @@ void ABIAbstractionArm32EABI::set_ret(uc_engine* uc, uint64_t val) const {
     write_reg_wrapper(uc, UC_ARM_REG_R0, val);
 }
 
-void ABIAbstractionArm32EABI::render_crash_context(uc_engine* uc) const {
+void ABIAbstractionArm32EABI::render_context(uc_engine* uc) const {
     eprintf("registers:\n");
     for (const auto& pair : ARM32_REGS) {
         uint32_t val;

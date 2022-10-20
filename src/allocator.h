@@ -22,6 +22,8 @@ public:
 
     uint64_t mmap(uint64_t addr, uint64_t size, int perm, const std::string& name);
 
+    const std::string* name_for_map(uint64_t addr) const;
+
 private:
     struct Map {
         explicit Map(uint64_t size, int perm, const std::string& name)

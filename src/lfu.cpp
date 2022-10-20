@@ -55,11 +55,62 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
     err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
     if (err != UC_ERR_OK) {
         WARN("error: %s", uc_strerror(err));
-        state.render_crash_context();
+        state.render_context();
         abort();
     }
 
     return 0;
+}
+
+int setup_for_fuzzing(init_context init_context_callback, uint64_t begin, uint64_t until) {
+    auto& state = State::the();
+
+    if (state.uc == nullptr) {
+        WARN("missing unicorn engine!");
+        return -1;
+    }
+
+    state.init_context_callback = init_context_callback;
+    state.begin = begin;
+    state.until = until;
+
+    if (state.context) {
+        uc_context_free(state.context);
+        state.context = nullptr;
+    }
+
+    uc_err err = uc_context_alloc(state.uc, &state.context);
+    if (err != UC_ERR_OK) {
+        WARN("could not allocate uc_context: %s", uc_strerror(err));
+        return -1;
+    }
+
+    err = uc_context_save(state.uc, state.context);
+    if (err != UC_ERR_OK) {
+        WARN("could not save uc context: %s", uc_strerror(err));
+        return -1;
+    }
+
+    return 0;
+}
+
+void triage_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
+    (void)uc;
+    (void)size;
+    (void)user_data;
+
+    auto& state = State::the();
+
+    fprintf(stderr, "\n=> %lx", addr);
+
+    const auto map = state.mmem->name_for_map(addr);
+    if (map) {
+        fprintf(stderr, " in %s", map->c_str());
+    }
+
+    fprintf(stderr, "\n");
+
+    state.render_context();
 }
 
 void malloc_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
@@ -105,46 +156,56 @@ int lfu_start_fuzzer(int argc,
 
     assert(argc > 0 && argv[0] != nullptr && "you need to provide a program name!");
 
-    auto& state = State::the();
-
-    if (state.uc == nullptr) {
-        WARN("missing unicorn engine!");
-        return -1;
-    }
-
-    state.init_context_callback = init_context_callback;
-    state.begin = begin;
-    state.until = until;
-
-    if (state.context) {
-        uc_context_free(state.context);
-        state.context = nullptr;
-    }
-
-    uc_err err = uc_context_alloc(state.uc, &state.context);
-    if (err != UC_ERR_OK) {
-        WARN("could not allocate uc_context: %s", uc_strerror(err));
-        return -1;
-    }
-
-    err = uc_context_save(state.uc, state.context);
-    if (err != UC_ERR_OK) {
-        WARN("could not save uc context: %s", uc_strerror(err));
-        return -1;
+    int res = setup_for_fuzzing(init_context_callback, begin, until);
+    if (res < 0) {
+        return res;
     }
 
     return LLVMFuzzerRunDriver(&argc, &argv, fuzz_one_input);
 }
 
+void lfu_triage_one_input(init_context init_context_callback,
+                          uint64_t begin,
+                          uint64_t until,
+                          const uint8_t* input,
+                          size_t input_size) {
+
+    int res = setup_for_fuzzing(init_context_callback, begin, until);
+    if (res < 0) {
+        WARN("setup failed, nothing will be run");
+        return;
+    }
+
+    uc_hook hook;
+    uc_err err =
+        uc_hook_add(State::the().uc, &hook, UC_HOOK_CODE, (void*)&triage_hook, nullptr, 1, 0);
+
+    if (err != UC_ERR_OK) {
+        WARN("trace hook failed, nothing will be run");
+        return;
+    }
+
+    fuzz_one_input(input, input_size);
+
+    uc_hook_del(State::the().uc, hook);
+}
+
 int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_size) {
+    return lfu_replace_allocator2(&malloc_addr, 1, &free_addr, 1, pool_size);
+}
+
+int lfu_replace_allocator2(const uint64_t malloc_addr[],
+                           size_t malloc_addr_size,
+                           const uint64_t free_addr[],
+                           size_t free_addr_size,
+                           size_t pool_size) {
+
     auto& state = State::the();
 
     if (state.allocator) {
         WARN("allocator already initialized!");
         return -1;
     }
-
-    TRACE("replacing malloc @ %lx and free @ %lx", malloc_addr, free_addr);
 
     state.allocator.reset(new Allocator(pool_size));
 
@@ -161,16 +222,34 @@ int lfu_replace_allocator(uint64_t malloc_addr, uint64_t free_addr, size_t pool_
         return UC_ERR_OK;
     };
 
-    uc_err err = add_hook(&state.h_malloc, (void*)&malloc_hook, malloc_addr);
-    if (err != UC_ERR_OK) {
-        WARN("malloc hook failed: %s", uc_strerror(err));
-        return err;
+    uc_err err;
+
+    for (size_t i = 0; i < malloc_addr_size; ++i) {
+        const uint64_t addr = malloc_addr[i];
+
+        TRACE("replacing malloc @ %lx", addr);
+
+        state.h_malloc.emplace_back();
+
+        err = add_hook(&state.h_malloc.back(), (void*)&malloc_hook, addr);
+        if (err != UC_ERR_OK) {
+            WARN("malloc hook @ %lx failed: %s", addr, uc_strerror(err));
+            return err;
+        }
     }
 
-    err = add_hook(&state.h_free, (void*)&free_hook, free_addr);
-    if (err != UC_ERR_OK) {
-        WARN("free hook failed: %s", uc_strerror(err));
-        return err;
+    for (size_t i = 0; i < free_addr_size; i++) {
+        const uint64_t addr = free_addr[i];
+
+        TRACE("replacing free @ %lx", addr);
+
+        state.h_free.emplace_back();
+
+        err = add_hook(&state.h_free.back(), (void*)&free_hook, addr);
+        if (err != UC_ERR_OK) {
+            WARN("free hook @ %lx failed: %s", addr, uc_strerror(err));
+            return err;
+        }
     }
 
     if (state.allocator->enable_address_sanitizer()) {
@@ -229,4 +308,9 @@ void lfu_add_patch(uint64_t addr, const uint8_t* patch_raw, size_t size, const c
     if (state.uc != nullptr) {
         state.patches.back().apply(state.uc);
     }
+}
+
+void lfu_force_crash() {
+    State::the().render_context();
+    abort();
 }
