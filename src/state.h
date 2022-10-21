@@ -11,6 +11,7 @@
 #include "abi.h"
 #include "allocator.h"
 #include "coverage.h"
+#include "crash_collector.h"
 #include "defs.h"
 #include "lfu.h"
 
@@ -59,7 +60,21 @@ struct State {
         return *instance.get();
     }
 
-    void render_context() { abi->render_context(uc); }
+    void crash(uc_err err = UC_ERR_OK) {
+        if (!uc) {
+            WARN("unicorn was not initialized but a crash was initiated!");
+            abort();
+        }
+        if (!abi) {
+            WARN("ABI was not initialized but a crash was initiated!");
+            abort();
+        }
+
+        crash_collector->report_state_as_crash_if_new(uc, err, *abi);
+
+        // emulation may be stopped already, we simply ignore the return code
+        uc_emu_stop(uc);
+    }
 
     uc_engine* uc { nullptr };
     std::unique_ptr<IABIAbstraction> abi { nullptr };
@@ -72,6 +87,8 @@ struct State {
     std::unique_ptr<MemoryMap> mmem { nullptr };
     std::unique_ptr<Allocator> allocator { nullptr };
     std::unique_ptr<Coverage> coverage { nullptr };
+
+    std::unique_ptr<CrashCollector> crash_collector { nullptr };
 
     std::vector<uc_hook> h_malloc;
     std::vector<uc_hook> h_free;

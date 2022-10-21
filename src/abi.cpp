@@ -1,7 +1,9 @@
 #include "abi.h"
 
 #include <cassert>
+#include <fstream>
 #include <map>
+#include <ostream>
 #include <stdio.h>
 #include <string>
 
@@ -135,6 +137,9 @@ std::pair<cs_arch, cs_mode> ABIAbstractionX86_64::get_capstone_arch() const {
     return std::make_pair(CS_ARCH_X86, CS_MODE_64);
 }
 
+uint64_t ABIAbstractionX86_64::read_pc(uc_engine* uc) const {
+    return read_reg_wrapper(uc, UC_X86_REG_RIP);
+}
 uint64_t ABIAbstractionX86_64::read_arg0(uc_engine* uc) const {
     return read_reg_wrapper(uc, UC_X86_REG_RDI);
 }
@@ -171,6 +176,9 @@ std::pair<cs_arch, cs_mode> ABIAbstractionMips32X::get_capstone_arch() const {
     return std::make_pair(CS_ARCH_MIPS, cs_mode(CS_MODE_MIPS32 | endianess()));
 }
 
+uint64_t ABIAbstractionMips32X::read_pc(uc_engine* uc) const {
+    return read_reg_wrapper(uc, UC_MIPS_REG_PC);
+}
 uint64_t ABIAbstractionMips32X::read_arg0(uc_engine* uc) const {
     return read_reg_wrapper(uc, UC_MIPS_REG_A0);
 }
@@ -398,6 +406,9 @@ std::pair<cs_arch, cs_mode> ABIAbstractionArm32EABI::get_capstone_arch() const {
     return std::make_pair(CS_ARCH_ARM, CS_MODE_ARM);
 }
 
+uint64_t ABIAbstractionArm32EABI::read_pc(uc_engine* uc) const {
+    return read_reg_wrapper(uc, UC_ARM_REG_PC);
+}
 uint64_t ABIAbstractionArm32EABI::read_arg0(uc_engine* uc) const {
     return read_reg_wrapper(uc, UC_ARM_REG_R0);
 }

@@ -247,6 +247,5 @@ void Allocator::report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_
     }
     fprintf(stderr, "\n");
 
-    State::the().render_context();
-    abort();
+    State::the().crash();
 }

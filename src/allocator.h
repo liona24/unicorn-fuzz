@@ -59,9 +59,7 @@ public:
 private:
     void reset_arena(size_t pool_size);
 
-    [[noreturn]] void report_invalid_memory_access(uint64_t addr,
-                                                   size_t size,
-                                                   uc_mem_type type) const;
+    void report_invalid_memory_access(uint64_t addr, size_t size, uc_mem_type type) const;
 
     struct Arena {
         uint64_t base_addr { 0 };

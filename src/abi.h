@@ -49,6 +49,7 @@ public:
 
     virtual std::pair<cs_arch, cs_mode> get_capstone_arch() const = 0;
 
+    virtual uint64_t read_pc(uc_engine* uc) const = 0;
     virtual uint64_t read_arg0(uc_engine* uc) const = 0;
     virtual uint64_t read_arg1(uc_engine* uc) const = 0;
     virtual void set_ret(uc_engine* uc, uint64_t val) const = 0;
@@ -72,6 +73,7 @@ public:
 
     std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
 
+    uint64_t read_pc(uc_engine* uc) const final;
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;
     void set_ret(uc_engine* uc, uint64_t val) const final;
@@ -87,6 +89,7 @@ public:
 
     std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
 
+    uint64_t read_pc(uc_engine* uc) const final;
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;
     void set_ret(uc_engine* uc, uint64_t val) const final;
@@ -128,6 +131,7 @@ class ABIAbstractionArm32EABI : public IABIAbstraction {
 
     std::pair<cs_arch, cs_mode> get_capstone_arch() const final;
 
+    uint64_t read_pc(uc_engine* uc) const final;
     uint64_t read_arg0(uc_engine* uc) const final;
     uint64_t read_arg1(uc_engine* uc) const final;
     void set_ret(uc_engine* uc, uint64_t val) const final;

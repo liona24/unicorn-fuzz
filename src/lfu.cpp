@@ -13,6 +13,7 @@
 #include "abi.h"
 #include "allocator.h"
 #include "coverage.h"
+#include "crash_collector.h"
 #include "defs.h"
 #include "state.h"
 
@@ -52,11 +53,11 @@ int fuzz_one_input(const uint8_t* data, size_t size) {
         patch.apply(state.uc);
     }
 
+    state.crash_collector->track_next_input(data, size);
+
     err = uc_emu_start(state.uc, state.begin, state.until, 0, 0);
     if (err != UC_ERR_OK) {
-        WARN("error: %s", uc_strerror(err));
-        state.render_context();
-        abort();
+        state.crash(err);
     }
 
     return 0;
@@ -119,7 +120,7 @@ void triage_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
 
     fprintf(stderr, "\n");
 
-    state.render_context();
+    state.abi->render_context(state.uc);
 }
 
 void malloc_hook(uc_engine* uc, uint64_t addr, uint32_t size, void* user_data) {
@@ -150,6 +151,7 @@ void lfu_init_engine(uc_engine* uc) {
     State::the().uc = uc;
     State::the().abi.reset(IABIAbstraction::for_uc(uc));
     State::the().mmem.reset(new MemoryMap);
+    State::the().crash_collector.reset(new CrashCollector);
 
     State::the().coverage.reset(new Coverage);
     if (State::the().coverage->enable_instrumentation()) {
@@ -321,7 +323,4 @@ void lfu_add_patch(uint64_t addr, const uint8_t* patch_raw, size_t size, const c
     }
 }
 
-void lfu_force_crash() {
-    State::the().render_context();
-    abort();
-}
+void lfu_force_crash() { State::the().crash(); }
