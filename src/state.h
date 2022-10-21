@@ -70,10 +70,15 @@ struct State {
             abort();
         }
 
-        crash_collector->report_state_as_crash_if_new(uc, err, *abi);
+        if (crash_collector) {
+            crash_collector->report_state_as_crash_if_new(uc, err, *abi);
 
-        // emulation may be stopped already, we simply ignore the return code
-        uc_emu_stop(uc);
+            // emulation may be stopped already, we simply ignore the return code
+            uc_emu_stop(uc);
+        } else {
+            abi->render_context(uc);
+            abort();
+        }
     }
 
     uc_engine* uc { nullptr };

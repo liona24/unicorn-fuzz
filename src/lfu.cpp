@@ -2,9 +2,11 @@
 
 #include <array>
 #include <cassert>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <string.h>
 #include <unordered_map>
 #include <vector>
 
@@ -151,7 +153,6 @@ void lfu_init_engine(uc_engine* uc) {
     State::the().uc = uc;
     State::the().abi.reset(IABIAbstraction::for_uc(uc));
     State::the().mmem.reset(new MemoryMap);
-    State::the().crash_collector.reset(new CrashCollector);
 
     State::the().coverage.reset(new Coverage);
     if (State::the().coverage->enable_instrumentation()) {
@@ -170,6 +171,26 @@ int lfu_start_fuzzer(int argc,
     int res = setup_for_fuzzing(init_context_callback, begin, until);
     if (res < 0) {
         return res;
+    }
+
+    // abuse the libFuzzer arguments a bit
+    bool no_continuous_fuzzing = std::getenv("LFU_NO_CONTINUOUS_FUZZING") != nullptr;
+    for (int i = 0; i < argc && !no_continuous_fuzzing; i++) {
+        no_continuous_fuzzing = strcmp(argv[i], "-no-continuous-fuzzing") == 0;
+
+        if (no_continuous_fuzzing) {
+            for (int j = i + 1; j < argc; j++) {
+                argv[j - 1] = argv[j];
+            }
+            argc--;
+
+            break;
+        }
+    }
+
+    if (!no_continuous_fuzzing) {
+        WARN("running in continuous fuzzing mode");
+        State::the().crash_collector.reset(new CrashCollector);
     }
 
     return LLVMFuzzerRunDriver(&argc, &argv, fuzz_one_input);
